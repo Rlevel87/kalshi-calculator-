@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalshi MLB Value Model</title>
+<style>
+  :root {
+    --bg: #0e1416;
+    --panel: #161f22;
+    --panel-alt: #10171a;
+    --rule: #26343a;
+    --ink: #e7eef0;
+    --ink-muted: #8fa3a9;
+    --ink-faint: #5c6e73;
+    --accent: #4fb0c6;
+    --pos: #4caf7d;
+    --pos-bg: rgba(76, 175, 125, 0.12);
+    --neg: #d9705f;
+    --neg-bg: rgba(217, 112, 95, 0.12);
+    --neutral: #c9a24b;
+    --team-a-color: var(--accent);
+    --team-b-color: var(--neutral);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .num, input, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; }
+  ::selection { background: var(--accent); color: #071013; }
+
+  header {
+    padding: 28px 24px 20px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel-alt);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: 14px;
+    max-width: 70ch;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 24px 80px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card.team-a { border-top: 3px solid var(--team-a-color); }
+  .card.team-b { border-top: 3px solid var(--team-b-color); }
+  .card.team-a h2 { color: var(--team-a-color); }
+  .card.team-b h2 { color: var(--team-b-color); }
+
+  .btn {
+    background: var(--panel-alt);
+    border: 1px solid var(--rule);
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .fetch-status {
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin: -6px 0 14px;
+    min-height: 15px;
+  }
+
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--panel-alt);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  @media (max-width: 780px) { .market-grid { grid-template-columns: 1fr; } }
+
+  details.advanced {
+    margin-top: 18px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 14px 20px;
+  }
+  details.advanced summary {
+    cursor: pointer;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-muted);
+  }
+  .adv-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+  @media (max-width: 780px) { .adv-grid { grid-template-columns: repeat(2, 1fr); } }
+  .adv-sub {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    margin: 16px 0 8px;
+  }
+
+  /* ---------- Results ---------- */
+  .results {
+    margin-top: 24px;
+  }
+  .rec-banner {
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    border: 1px solid var(--rule);
+    background: var(--panel);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .rec-banner.pos { border-color: var(--pos); background: var(--pos-bg); }
+  .rec-banner.neg { border-color: var(--neg); background: var(--neg-bg); }
+  .rec-banner .rec-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted); margin-bottom: 4px; }
+  .rec-banner .rec-main { font-size: 20px; font-weight: 700; }
+  .rec-banner .rec-edge { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rec-banner.pos .rec-edge { color: var(--pos); }
+  .rec-banner.neg .rec-edge { color: var(--neg); }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 780px) { .compare-grid { grid-template-columns: 1fr; } }
+
+  .team-result {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .team-result h3 {
+    margin: 0 0 12px;
+    font-size: 14px;
+  }
+  .bar-row { margin-bottom: 12px; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .bar-label .val { font-variant-numeric: tabular-nums; color: var(--ink); }
+  .bar-track {
+    height: 8px;
+    background: var(--panel-alt);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 999px; }
+  .bar-fill.model { background: var(--accent); }
+  .bar-fill.market { background: var(--ink-faint); }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 18px;
+  }
+  @media (max-width: 780px) { .metrics { grid-template-columns: 1fr; } }
+  .metric {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .metric .m-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 6px; }
+  .metric .m-val { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .m-sub { font-size: 12px; color: var(--ink-muted); margin-top: 3px; }
+
+  .howitworks {
+    margin-top: 22px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .howitworks summary {
+    cursor: pointer;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-muted);
+  }
+  .howitworks .steps { margin-top: 14px; font-size: 14px; color: var(--ink-muted); }
+  .howitworks .steps p { margin: 0 0 10px; }
+  .howitworks code {
+    background: var(--panel-alt);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--ink);
+    font-size: 0.92em;
+  }
+  .disclaimer {
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    border-top: 1px dashed var(--rule);
+    padding-top: 14px;
+  }
+
+  /* ---------- Trade log ---------- */
+  .log-controls { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .log-controls .field { margin-bottom: 0; width: 150px; }
+  .log-summary { font-size: 13px; color: var(--ink-muted); }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th, .log-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .log-table th {
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+  }
+  .log-table select {
+    background: var(--panel-alt);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12.5px;
+  }
+  .pl-pos { color: var(--pos); }
+  .pl-neg { color: var(--neg); }
+
+  .hidden { display: none !important; }
+  .sample-note { font-size: 12px; color: var(--ink-faint); margin: 6px 0 0; }
+
+  .toggle-row { display: flex; gap: 18px; align-items: center; }
+  .toggle-opt { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .toggle-opt input { accent-color: var(--accent); }
+
+  /* ---------- Matchup banner ---------- */
+  .matchup-banner {
+    display: flex;
+    align-items: stretch;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    margin-bottom: 18px;
+    min-height: 88px;
+  }
+  .mb-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 22px;
+    background: color-mix(in srgb, var(--mb-color, var(--panel)) 16%, var(--panel));
+    border-bottom: 3px solid var(--mb-color, var(--rule));
+    transition: background 0.25s ease, border-color 0.25s ease;
+  }
+  .mb-a { justify-content: flex-start; --mb-color: var(--team-a-color); }
+  .mb-b { justify-content: flex-end; flex-direction: row-reverse; --mb-color: var(--team-b-color); }
+  .mb-logo {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .mb-logo.loaded { opacity: 1; }
+  .mb-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    text-align: left;
+  }
+  .mb-b .mb-name { text-align: right; }
+  .mb-vs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px;
+    font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    background: var(--panel-alt);
+    flex: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Rob's kalshi MLB Value Model</h1>
+  <p>Compares a recent-form power rating for each team against Kalshi's market-implied probability to surface mispriced contracts. Enter both sides' Kalshi prices when you have them &mdash; the model de-vigs the market before comparing.</p>
+</header>
+
+<div class="wrap">
+
+  <!-- Matchup banner -->
+  <div class="matchup-banner">
+    <div class="mb-side mb-a">
+      <img class="mb-logo" id="mbLogoA" alt="">
+      <div class="mb-name" id="mbNameA">Team A</div>
+    </div>
+    <div class="mb-vs">VS</div>
+    <div class="mb-side mb-b">
+      <div class="mb-name" id="mbNameB">Team B</div>
+      <img class="mb-logo" id="mbLogoB" alt="">
+    </div>
+  </div>
+
+  <!-- Kalshi market inputs -->
+  <div class="card">
+    <h2>Kalshi Market</h2>
+    <div class="market-grid">
+      <div>
+        <div class="field">
+          <label for="teamAName">Team A name</label>
+          <input type="text" id="teamAName" value="Team A">
+        </div>
+        <div class="field">
+          <label for="priceA">Team A &ldquo;Yes&rdquo; price (&cent;, 1&ndash;99)</label>
+          <input type="number" id="priceA" min="1" max="99" step="1" value="55">
+        </div>
+      </div>
+      <div>
+        <div class="field">
+          <label for="teamBName">Team B name</label>
+          <input type="text" id="teamBName" value="Team B">
+        </div>
+        <div class="field">
+          <label for="priceB">Team B &ldquo;Yes&rdquo; price (&cent;, optional)</label>
+          <input type="number" id="priceB" min="1" max="99" step="1" placeholder="leave blank = 100 &minus; A">
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px;">
+      <label>Home team &mdash; auto-detected by &ldquo;Fetch live data&rdquo; below, or set manually</label>
+      <div class="toggle-row">
+        <label class="toggle-opt"><input type="radio" name="homeTeam" value="A" checked><span id="homeOptALabel">Team A</span></label>
+        <label class="toggle-opt"><input type="radio" name="homeTeam" value="B"><span id="homeOptBLabel">Team B</span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Team stat inputs -->
+  <div class="grid" style="margin-top:18px;">
+    <div class="card team-a">
+      <h2><span id="cardATitle">Team A &mdash; Recent Form</span><button type="button" class="btn" id="fetchBtnA" onclick="fetchTeamData('A')">Fetch live data</button></h2>
+      <div class="fetch-status" id="fetchStatusA"></div>
+      <div class="field">
+        <label for="opsA">Last 7 days team OPS</label>
+        <input type="number" id="opsA" step="0.001" value="0.740">
+      </div>
+      <div class="field">
+        <label for="teamEraA">Last 7 days team ERA</label>
+        <input type="number" id="teamEraA" step="0.01" value="3.90">
+      </div>
+      <div class="field">
+        <label for="l10A">Last 10 games &mdash; wins (out of 10)</label>
+        <input type="number" id="l10A" min="0" max="10" step="1" value="6">
+      </div>
+      <div class="field">
+        <label for="spEraA">Starting pitcher &mdash; ERA over last 4 starts</label>
+        <input type="number" id="spEraA" step="0.01" value="3.20">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="homeWinPctA">Home win% (season)</label>
+          <input type="number" id="homeWinPctA" step="0.001" value="0.540">
+        </div>
+        <div class="field">
+          <label for="awayWinPctA">Away win% (season)</label>
+          <input type="number" id="awayWinPctA" step="0.001" value="0.460">
+        </div>
+      </div>
+    </div>
+
+    <div class="card team-b">
+      <h2><span id="cardBTitle">Team B &mdash; Recent Form</span><button type="button" class="btn" id="fetchBtnB" onclick="fetchTeamData('B')">Fetch live data</button></h2>
+      <div class="fetch-status" id="fetchStatusB"></div>
+      <div class="field">
+        <label for="opsB">Last 7 days team OPS</label>
+        <input type="number" id="opsB" step="0.001" value="0.700">
+      </div>
+      <div class="field">
+        <label for="teamEraB">Last 7 days team ERA</label>
+        <input type="number" id="teamEraB" step="0.01" value="4.30">
+      </div>
+      <div class="field">
+        <label for="l10B">Last 10 games &mdash; wins (out of 10)</label>
+        <input type="number" id="l10B" min="0" max="10" step="1" value="5">
+      </div>
+      <div class="field">
+        <label for="spEraB">Starting pitcher &mdash; ERA over last 4 starts</label>
+        <input type="number" id="spEraB" step="0.01" value="4.10">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="homeWinPctB">Home win% (season)</label>
+          <input type="number" id="homeWinPctB" step="0.001" value="0.520">
+        </div>
+        <div class="field">
+          <label for="awayWinPctB">Away win% (season)</label>
+          <input type="number" id="awayWinPctB" step="0.001" value="0.440">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lineup vs opposing starter -->
+  <div class="card" style="margin-top:18px;">
+    <h2>Lineup vs. Opposing Starter</h2>
+    <div class="log-controls" style="margin-bottom:0;">
+      <button type="button" class="btn" id="fetchMatchupBtn" onclick="fetchLineupMatchup()">Fetch matchup lineups</button>
+    </div>
+    <div class="fetch-status" id="matchupStatus">Pulls each team's actual starting lineup and each hitter's career at-bats against the opposing starter, once MLB posts lineups (usually 1&ndash;3 hours before first pitch).</div>
+    <div class="compare-grid hidden" id="matchupResults">
+      <div class="team-result">
+        <h3 id="matchupATitle">Team A lineup vs Team B SP</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Lineup OPS vs SP</span><span class="val" id="matchupAOps">&mdash;</span></div>
+        </div>
+        <div class="sample-note" id="matchupASample"></div>
+        <div style="overflow-x:auto; margin-top:10px;">
+          <table class="log-table" id="matchupATable">
+            <thead><tr><th>Batter</th><th>PA</th><th>OPS vs SP</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="team-result">
+        <h3 id="matchupBTitle">Team B lineup vs Team A SP</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Lineup OPS vs SP</span><span class="val" id="matchupBOps">&mdash;</span></div>
+        </div>
+        <div class="sample-note" id="matchupBSample"></div>
+        <div style="overflow-x:auto; margin-top:10px;">
+          <table class="log-table" id="matchupBTable">
+            <thead><tr><th>Batter</th><th>PA</th><th>OPS vs SP</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advanced settings -->
+  <details class="advanced">
+    <summary>Advanced &mdash; weights, league baselines, staking</summary>
+
+    <div class="adv-sub">Component weights (auto-normalized to sum to 1)</div>
+    <div class="adv-grid">
+      <div class="field"><label for="wSpEra">Starting pitcher ERA</label><input type="number" id="wSpEra" step="0.01" value="0.30"></div>
+      <div class="field"><label for="wTeamEra">Team L7 ERA</label><input type="number" id="wTeamEra" step="0.01" value="0.15"></div>
+      <div class="field"><label for="wOps">Team L7 OPS</label><input type="number" id="wOps" step="0.01" value="0.25"></div>
+      <div class="field"><label for="wWin">L10 win%</label><input type="number" id="wWin" step="0.01" value="0.15"></div>
+      <div class="field"><label for="wHomeAway">Home/away win%</label><input type="number" id="wHomeAway" step="0.01" value="0.15"></div>
+    </div>
+
+    <div class="adv-sub">League baselines (mean / standard deviation used for z-scores)</div>
+    <div class="adv-grid">
+      <div class="field"><label for="opsMean">OPS mean</label><input type="number" id="opsMean" step="0.001" value="0.720"></div>
+      <div class="field"><label for="opsSd">OPS st. dev.</label><input type="number" id="opsSd" step="0.001" value="0.090"></div>
+      <div class="field"><label for="teamEraMean">Team ERA mean</label><input type="number" id="teamEraMean" step="0.01" value="4.10"></div>
+      <div class="field"><label for="teamEraSd">Team ERA st. dev.</label><input type="number" id="teamEraSd" step="0.01" value="1.10"></div>
+      <div class="field"><label for="spEraMean">SP ERA mean</label><input type="number" id="spEraMean" step="0.01" value="4.00"></div>
+      <div class="field"><label for="spEraSd">SP ERA st. dev.</label><input type="number" id="spEraSd" step="0.01" value="1.50"></div>
+      <div class="field"><label for="winSd">L10 win% st. dev.</label><input type="number" id="winSd" step="0.01" value="0.16"></div>
+      <div class="field"><label for="homeAwaySd">Home/away win% st. dev.</label><input type="number" id="homeAwaySd" step="0.001" value="0.085"></div>
+      <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="3.2"></div>
+    </div>
+
+    <div class="adv-sub">Staking</div>
+    <div class="adv-grid">
+      <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.25"></div>
+      <div class="field"><label for="bankroll">Bankroll ($)</label><input type="number" id="bankroll" step="10" value="1000"></div>
+      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="3"></div>
+    </div>
+  </details>
+
+  <!-- Results -->
+  <div class="results">
+    <div class="rec-banner" id="recBanner">
+      <div>
+        <div class="rec-label">Recommendation</div>
+        <div class="rec-main" id="recMain">&mdash;</div>
+      </div>
+      <div class="rec-edge" id="recEdgeVal">&mdash;</div>
+    </div>
+
+    <div class="compare-grid">
+      <div class="team-result">
+        <h3 id="resATitle">Team A</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Model probability</span><span class="val" id="modelAVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill model" id="modelABar" style="width:0%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"><span>Market (de-vigged)</span><span class="val" id="marketAVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill market" id="marketABar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="team-result">
+        <h3 id="resBTitle">Team B</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Model probability</span><span class="val" id="modelBVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill model" id="modelBBar" style="width:0%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"><span>Market (de-vigged)</span><span class="val" id="marketBVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill market" id="marketBBar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="m-label">Edge (best side)</div>
+        <div class="m-val" id="edgeVal">&mdash;</div>
+        <div class="m-sub">model &minus; market, percentage points</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">EV per $1 contract</div>
+        <div class="m-val" id="evVal">&mdash;</div>
+        <div class="m-sub" id="evSub">&mdash;</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Suggested stake</div>
+        <div class="m-val" id="kellyVal">&mdash;</div>
+        <div class="m-sub" id="kellySub">&mdash;</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:22px;">
+    <h2>Trade Log</h2>
+    <div class="log-controls">
+      <div class="field">
+        <label for="betAmount">Bet amount ($)</label>
+        <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
+      </div>
+      <button type="button" class="btn" id="logTradeBtn" onclick="logCurrentTrade()">Log this trade</button>
+      <button type="button" class="btn" onclick="exportLog()">Export .json</button>
+      <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
+      <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
+    </div>
+    <div class="log-summary" id="logSummary">No trades logged yet.</div>
+    <div style="overflow-x:auto; margin-top:12px;">
+      <table class="log-table">
+        <thead>
+          <tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge</th><th>Stake</th><th>To Win</th><th>Result</th><th>P/L</th><th></th></tr>
+        </thead>
+        <tbody id="logTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <details class="howitworks">
+    <summary>How this model works</summary>
+    <div class="steps">
+      <p><strong>1. Composite rating.</strong> Each of the 5 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>), so OPS, ERA, win%, SP ERA, and home/away win% become comparable numbers. ERA z-scores are inverted since lower ERA is better. Only the split matching where each team is actually playing &mdash; home win% for the home team, away win% for the away team &mdash; feeds in; the other split stays visible but unused. The five z-scores are combined with your weights into a single Team Strength Index (TSI).</p>
+      <p><strong>2. Implied win%.</strong> Each team's TSI is passed through a logistic curve, dampened by the &ldquo;confidence dampening&rdquo; constant, so a strong composite edge still tops out around 65&ndash;70% &mdash; consistent with how much single-game variance real baseball has.</p>
+      <p><strong>3. Head-to-head via log5.</strong> The two teams' implied win%s (p<sub>A</sub>, p<sub>B</sub>) are combined with Bill James' log5 formula: <code>P(A) = (p<sub>A</sub> &minus; p<sub>A</sub>p<sub>B</sub>) / (p<sub>A</sub> + p<sub>B</sub> &minus; 2p<sub>A</sub>p<sub>B</sub>)</code>. This is the model's final win probability.</p>
+      <p><strong>4. De-vig the market.</strong> If you enter both Kalshi prices, they're normalized to sum to 100% (<code>priceA / (priceA + priceB)</code>) so the comparison isn't partly just the exchange's spread.</p>
+      <p><strong>5. Edge, EV, Kelly.</strong> Edge = model probability &minus; market probability. EV per $1 contract = model probability &minus; price (as a fraction). Suggested stake uses the Kelly criterion (<code>f* = p &minus; (1&minus;p)&middot;price/(1&minus;price)</code>), scaled down by your Kelly fraction as a bankroll-management safety margin.</p>
+    </div>
+    <div class="disclaimer">
+      7-day and 4-start samples are small and noisy &mdash; treat this as a decision-support heuristic to tune over time against your own results, not a guaranteed edge. Kalshi prices move; re-check before trading. Never stake more than you can afford to lose, and consider using a smaller Kelly fraction (e.g. 0.1&ndash;0.25) to dampen variance from a model this sensitive to small samples. &ldquo;Fetch live data&rdquo; pulls from MLB's public Stats API (statsapi.mlb.com), which is free and unauthenticated but not an official partner feed &mdash; spot-check anything that looks off before trading on it.
+    </div>
+  </details>
+
+</div>
+
+<script>
+let mlbTeams = null; // cached MLB team list
+let lastCalc = null; // latest recalc() output, read by "Log this trade"
+
+function z(value, mean, sd) {
+  return (value - mean) / sd;
+}
+
+function logistic(x, scale) {
+  return 1 / (1 + Math.pow(10, -x / scale));
+}
+
+// Bill James' log5: combines two independent win% ratings into a head-to-head probability.
+function log5(pA, pB) {
+  const den = pA + pB - 2 * pA * pB;
+  if (den <= 0) return 0.5;
+  return (pA - pA * pB) / den;
+}
+
+function kellyFraction(p, price) {
+  if (price <= 0 || price >= 1) return 0;
+  const b = (1 - price) / price;
+  const q = 1 - p;
+  const f = (b * p - q) / b;
+  return Math.max(0, f);
+}
+
+function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
+function fmtPts(x) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + ' pts'; }
+
+function val(id) { return parseFloat(document.getElementById(id).value); }
+function txt(id) { return document.getElementById(id).value.trim(); }
+
+function compositeTSI(ops, teamEra, winPct, spEra, homeAwayWinPct, weights, base) {
+  const opsZ = z(ops, base.opsMean, base.opsSd);
+  const teamEraZ = -z(teamEra, base.teamEraMean, base.teamEraSd);
+  const winZ = z(winPct, 0.5, base.winSd);
+  const spEraZ = -z(spEra, base.spEraMean, base.spEraSd);
+  const homeAwayZ = z(homeAwayWinPct, 0.5, base.homeAwaySd);
+  return weights.spEra * spEraZ + weights.teamEra * teamEraZ + weights.ops * opsZ + weights.win * winZ + weights.homeAway * homeAwayZ;
+}
+
+function recalc() {
+  const nameA = txt('teamAName') || 'Team A';
+  const nameB = txt('teamBName') || 'Team B';
+  document.getElementById('cardATitle').textContent = nameA + ' — Recent Form';
+  document.getElementById('cardBTitle').textContent = nameB + ' — Recent Form';
+  document.getElementById('resATitle').textContent = nameA;
+  document.getElementById('resBTitle').textContent = nameB;
+  document.getElementById('homeOptALabel').textContent = nameA;
+  document.getElementById('homeOptBLabel').textContent = nameB;
+
+  // Weights, auto-normalized
+  let w = {
+    spEra: val('wSpEra'), teamEra: val('wTeamEra'), ops: val('wOps'), win: val('wWin'), homeAway: val('wHomeAway')
+  };
+  const wSum = w.spEra + w.teamEra + w.ops + w.win + w.homeAway;
+  if (wSum > 0) { w.spEra /= wSum; w.teamEra /= wSum; w.ops /= wSum; w.win /= wSum; w.homeAway /= wSum; }
+
+  const base = {
+    opsMean: val('opsMean'), opsSd: val('opsSd'),
+    teamEraMean: val('teamEraMean'), teamEraSd: val('teamEraSd'),
+    spEraMean: val('spEraMean'), spEraSd: val('spEraSd'),
+    winSd: val('winSd'), homeAwaySd: val('homeAwaySd')
+  };
+  const scale = val('scale');
+
+  // Only the split matching where each team actually plays this game feeds the model —
+  // the other split stays visible but unused, so a fetch doesn't silently overwrite your intent.
+  const homeTeam = document.querySelector('input[name="homeTeam"]:checked').value;
+  const homeAwayA = homeTeam === 'A' ? val('homeWinPctA') : val('awayWinPctA');
+  const homeAwayB = homeTeam === 'B' ? val('homeWinPctB') : val('awayWinPctB');
+
+  const tsiA = compositeTSI(val('opsA'), val('teamEraA'), val('l10A') / 10, val('spEraA'), homeAwayA, w, base);
+  const tsiB = compositeTSI(val('opsB'), val('teamEraB'), val('l10B') / 10, val('spEraB'), homeAwayB, w, base);
+
+  const impliedA = logistic(tsiA, scale);
+  const impliedB = logistic(tsiB, scale);
+
+  const modelA = log5(impliedA, impliedB);
+  const modelB = 1 - modelA;
+
+  // De-vig market prices
+  const priceACents = val('priceA');
+  let priceBCents = val('priceB');
+  if (isNaN(priceBCents)) priceBCents = 100 - priceACents;
+  const rawA = priceACents / 100;
+  const rawB = priceBCents / 100;
+  const overround = rawA + rawB;
+  const marketA = overround > 0 ? rawA / overround : 0.5;
+  const marketB = 1 - marketA;
+
+  document.getElementById('modelAVal').textContent = fmtPct(modelA);
+  document.getElementById('modelBVal').textContent = fmtPct(modelB);
+  document.getElementById('marketAVal').textContent = fmtPct(marketA);
+  document.getElementById('marketBVal').textContent = fmtPct(marketB);
+  document.getElementById('modelABar').style.width = (modelA * 100) + '%';
+  document.getElementById('modelBBar').style.width = (modelB * 100) + '%';
+  document.getElementById('marketABar').style.width = (marketA * 100) + '%';
+  document.getElementById('marketBBar').style.width = (marketB * 100) + '%';
+
+  const edgeA = modelA - marketA;
+  const edgeB = modelB - marketB;
+
+  const threshold = val('edgeThreshold') / 100;
+  const kellyFrac = val('kellyFrac');
+  const bankroll = val('bankroll');
+
+  const banner = document.getElementById('recBanner');
+  const recMain = document.getElementById('recMain');
+  const recEdgeVal = document.getElementById('recEdgeVal');
+  const edgeVal = document.getElementById('edgeVal');
+  const evVal = document.getElementById('evVal');
+  const evSub = document.getElementById('evSub');
+  const kellyVal = document.getElementById('kellyVal');
+  const kellySub = document.getElementById('kellySub');
+
+  let side, edge, price, model, name;
+  if (edgeA >= edgeB) { side = 'A'; edge = edgeA; price = rawA; model = modelA; name = nameA; }
+  else { side = 'B'; edge = edgeB; price = rawB; model = modelB; name = nameB; }
+
+  edgeVal.textContent = fmtPts(edge);
+  const ev = model - price;
+  evVal.textContent = (ev >= 0 ? '+$' : '-$') + Math.abs(ev).toFixed(3);
+  evSub.textContent = 'per $1 staked on ' + name;
+
+  let stakeFrac = 0;
+  if (edge >= threshold) {
+    banner.className = 'rec-banner pos';
+    recMain.textContent = 'Buy ' + name + ' Yes';
+    recEdgeVal.textContent = fmtPts(edge);
+    stakeFrac = kellyFraction(model, price) * kellyFrac;
+    kellyVal.textContent = (stakeFrac * 100).toFixed(1) + '%';
+    kellySub.textContent = '≈ $' + (stakeFrac * bankroll).toFixed(2) + ' of bankroll (fractional Kelly)';
+  } else if (edge <= -threshold) {
+    banner.className = 'rec-banner neg';
+    recMain.textContent = 'No trade — market looks ahead of the model';
+    recEdgeVal.textContent = fmtPts(edge);
+    kellyVal.textContent = '$0.00';
+    kellySub.textContent = 'no positive-EV side found above threshold';
+  } else {
+    banner.className = 'rec-banner';
+    recMain.textContent = 'Pass — edge below threshold';
+    recEdgeVal.textContent = fmtPts(edge);
+    kellyVal.textContent = '$0.00';
+    kellySub.textContent = 'edge too small to act on';
+  }
+
+  // Snapshot for the trade log — "Log this trade" reads this instead of recomputing.
+  lastCalc = { nameA: nameA, nameB: nameB, side: side, edge: edge, price: price, model: model, stakeFrac: stakeFrac, bankroll: bankroll };
+}
+
+document.querySelectorAll('input').forEach(function (el) {
+  el.addEventListener('input', recalc);
+});
+recalc();
+
+/* =======================================================================
+   Live data: MLB Stats API (statsapi.mlb.com) — public, unauthenticated,
+   CORS-open (Access-Control-Allow-Origin: *), so this runs client-side
+   with no backend. Not an official partner API; endpoints are stable in
+   practice but undocumented, so failures are caught and surfaced inline
+   rather than left to break the page.
+   ======================================================================= */
+
+const MLB_API = 'https://statsapi.mlb.com/api/v1';
+
+async function mlbGet(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('MLB API returned ' + res.status);
+  return res.json();
+}
+
+async function getTeams() {
+  if (mlbTeams) return mlbTeams;
+  const data = await mlbGet(MLB_API + '/teams?sportId=1');
+  mlbTeams = data.teams;
+  return mlbTeams;
+}
+
+// Curated brand colors, keyed by MLB team id — the Stats API doesn't expose these, so
+// they're hand-set from public team branding. "primary" is picked for on-page legibility
+// (the more vivid of a team's colors), not strict brand-primary designation.
+const TEAM_COLORS = {
+  108: { primary: '#BA0021', secondary: '#003263' }, // Angels
+  109: { primary: '#A71930', secondary: '#E3D4AD' }, // Diamondbacks
+  110: { primary: '#DF4601', secondary: '#000000' }, // Orioles
+  111: { primary: '#BD3039', secondary: '#0C2340' }, // Red Sox
+  112: { primary: '#0E3386', secondary: '#CC3433' }, // Cubs
+  113: { primary: '#C6011F', secondary: '#000000' }, // Reds
+  114: { primary: '#E31937', secondary: '#0C2340' }, // Guardians
+  115: { primary: '#33006F', secondary: '#C4CED4' }, // Rockies
+  116: { primary: '#FA4616', secondary: '#0C2340' }, // Tigers
+  117: { primary: '#EB6E1F', secondary: '#002D62' }, // Astros
+  118: { primary: '#004687', secondary: '#BD9B60' }, // Royals
+  119: { primary: '#005A9C', secondary: '#A5ACAF' }, // Dodgers
+  120: { primary: '#AB0003', secondary: '#14225A' }, // Nationals
+  121: { primary: '#FF5910', secondary: '#002D72' }, // Mets
+  133: { primary: '#EFB21E', secondary: '#003831' }, // Athletics
+  134: { primary: '#FDB827', secondary: '#27251F' }, // Pirates
+  135: { primary: '#FFC425', secondary: '#2F241D' }, // Padres
+  136: { primary: '#005C5C', secondary: '#0C2C56' }, // Mariners
+  137: { primary: '#FD5A1E', secondary: '#27251F' }, // Giants
+  138: { primary: '#C41E3A', secondary: '#0C2340' }, // Cardinals
+  139: { primary: '#F5D130', secondary: '#092C5C' }, // Rays
+  140: { primary: '#C0111F', secondary: '#003278' }, // Rangers
+  141: { primary: '#134A8E', secondary: '#E8291C' }, // Blue Jays
+  142: { primary: '#D31145', secondary: '#002B5C' }, // Twins
+  143: { primary: '#E81828', secondary: '#002D72' }, // Phillies
+  144: { primary: '#CE1141', secondary: '#13274F' }, // Braves
+  145: { primary: '#C4CED4', secondary: '#27251F' }, // White Sox
+  146: { primary: '#00A3E0', secondary: '#000000' }, // Marlins
+  147: { primary: '#0C2340', secondary: '#C4CED3' }, // Yankees
+  158: { primary: '#B6922E', secondary: '#0A2351' }  // Brewers
+};
+
+function applyTeamBadge(side, team) {
+  const colors = TEAM_COLORS[team.id] || { primary: '#4fb0c6', secondary: '#8fa3a9' };
+  document.documentElement.style.setProperty('--team-' + side.toLowerCase() + '-color', colors.primary);
+  const logo = document.getElementById('mbLogo' + side);
+  logo.classList.remove('loaded');
+  logo.onload = function () { logo.classList.add('loaded'); };
+  logo.onerror = function () { logo.classList.remove('loaded'); };
+  logo.src = 'https://www.mlbstatic.com/team-logos/' + team.id + '.svg';
+  logo.alt = team.name + ' logo';
+  document.getElementById('mbName' + side).textContent = team.name;
+}
+
+// Lightweight, cache-only resolve so logos/colors update just from typing a name — doesn't
+// wait on "Fetch live data," which pulls a lot more than this needs.
+async function resolveAndBadge(side) {
+  const name = txt(side === 'A' ? 'teamAName' : 'teamBName');
+  if (!name) return;
+  try {
+    const teams = await getTeams();
+    const team = findTeam(name, teams);
+    if (team) applyTeamBadge(side, team);
+  } catch (e) { /* cosmetic only; ignore failures */ }
+}
+
+function findTeam(query, teams) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const exact = teams.find(function (t) {
+    return t.abbreviation.toLowerCase() === q || t.teamName.toLowerCase() === q || t.name.toLowerCase() === q;
+  });
+  if (exact) return exact;
+  return teams.find(function (t) {
+    return t.name.toLowerCase().includes(q) || t.teamName.toLowerCase().includes(q) ||
+      t.shortName.toLowerCase().includes(q) || t.locationName.toLowerCase().includes(q);
+  }) || null;
+}
+
+// MLB innings-pitched strings use thirds (".1" = 1 out, ".2" = 2 outs), not decimal.
+function parseIPtoOuts(ipStr) {
+  if (ipStr === undefined || ipStr === null) return 0;
+  const parts = String(ipStr).split('.');
+  const whole = parseInt(parts[0], 10) || 0;
+  const thirds = parts[1] ? parseInt(parts[1], 10) : 0;
+  return whole * 3 + thirds;
+}
+
+function isoDaysFromNow(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function getStandingsSplits(teamId, season) {
+  const data = await mlbGet(MLB_API + '/standings?leagueId=103,104&season=' + season + '&standingsTypes=regularSeason');
+  for (const rec of data.records) {
+    for (const tr of rec.teamRecords) {
+      if (tr.team.id === teamId) {
+        const lastTen = tr.records.splitRecords.find(function (s) { return s.type === 'lastTen'; });
+        const home = tr.records.splitRecords.find(function (s) { return s.type === 'home'; });
+        const away = tr.records.splitRecords.find(function (s) { return s.type === 'away'; });
+        return {
+          lastTenWins: lastTen ? lastTen.wins : null,
+          homeWinPct: (home && (home.wins + home.losses) > 0) ? home.wins / (home.wins + home.losses) : null,
+          awayWinPct: (away && (away.wins + away.losses) > 0) ? away.wins / (away.wins + away.losses) : null
+        };
+      }
+    }
+  }
+  return null;
+}
+
+// Aggregates raw counting stats across last-7-days games, then derives OPS/ERA —
+// summing first avoids skewing the rate stats toward small single-game samples.
+async function getTeamL7Stats(teamId) {
+  const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamId + '&startDate=' + isoDaysFromNow(-7) + '&endDate=' + isoDaysFromNow(0));
+  const games = [];
+  const seen = new Set();
+  (sched.dates || []).forEach(function (date) {
+    date.games.forEach(function (g) {
+      if (g.status.abstractGameState === 'Final' && !seen.has(g.gamePk)) {
+        seen.add(g.gamePk);
+        games.push(g);
+      }
+    });
+  });
+
+  let h = 0, ab = 0, bb = 0, hbp = 0, sf = 0, tb = 0, er = 0, outs = 0;
+  for (const g of games) {
+    const box = await mlbGet(MLB_API + '/game/' + g.gamePk + '/boxscore');
+    const isHome = g.teams.home.team.id === teamId;
+    const side = isHome ? box.teams.home : box.teams.away;
+    const bat = side.teamStats.batting;
+    const pit = side.teamStats.pitching;
+    h += bat.hits; ab += bat.atBats; bb += bat.baseOnBalls; hbp += bat.hitByPitch; sf += bat.sacFlies; tb += bat.totalBases;
+    er += pit.earnedRuns; outs += parseIPtoOuts(pit.inningsPitched);
+  }
+
+  const obpDen = ab + bb + hbp + sf;
+  const ops = (obpDen > 0 && ab > 0) ? ((h + bb + hbp) / obpDen) + (tb / ab) : null;
+  const era = outs > 0 ? (er * 27) / outs : null;
+  return { ops: ops, era: era, gamesCounted: games.length };
+}
+
+async function getProbableStarter(teamId) {
+  const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamId + '&startDate=' + isoDaysFromNow(0) + '&endDate=' + isoDaysFromNow(6) + '&hydrate=probablePitcher');
+  for (const date of (sched.dates || [])) {
+    for (const g of date.games) {
+      const isHome = g.teams.home.team.id === teamId;
+      const side = isHome ? g.teams.home : g.teams.away;
+      if (side.probablePitcher && side.probablePitcher.id) return side.probablePitcher;
+    }
+  }
+  return null;
+}
+
+async function getPitcherLast4ERA(pitcherId, season) {
+  const data = await mlbGet(MLB_API + '/people/' + pitcherId + '/stats?stats=gameLog&group=pitching&season=' + season);
+  const splits = (data.stats && data.stats[0] && data.stats[0].splits) || [];
+  const starts = splits.filter(function (s) { return s.stat && s.stat.gamesStarted === 1; });
+  const last4 = starts.slice(-4);
+  let er = 0, outs = 0;
+  last4.forEach(function (s) { er += s.stat.earnedRuns; outs += parseIPtoOuts(s.stat.inningsPitched); });
+  const era = outs > 0 ? (er * 27) / outs : null;
+  return { era: era, starts: last4.length };
+}
+
+async function fetchTeamData(side) {
+  const nameInput = document.getElementById(side === 'A' ? 'teamAName' : 'teamBName');
+  const statusEl = document.getElementById('fetchStatus' + side);
+  const btn = document.getElementById('fetchBtn' + side);
+  const query = nameInput.value;
+  const season = new Date().getFullYear();
+
+  btn.disabled = true;
+  statusEl.textContent = 'Looking up "' + query + '"…';
+  try {
+    const teams = await getTeams();
+    const team = findTeam(query, teams);
+    if (!team) {
+      statusEl.textContent = 'No MLB team matched "' + query + '" — try the city, nickname, or abbreviation.';
+      return;
+    }
+    nameInput.value = team.teamName;
+    applyTeamBadge(side, team);
+
+    statusEl.textContent = 'Fetching standings splits…';
+    const splits = await getStandingsSplits(team.id, season);
+    if (splits) {
+      if (splits.lastTenWins !== null) document.getElementById('l10' + side).value = splits.lastTenWins;
+      if (splits.homeWinPct !== null) document.getElementById('homeWinPct' + side).value = splits.homeWinPct.toFixed(3);
+      if (splits.awayWinPct !== null) document.getElementById('awayWinPct' + side).value = splits.awayWinPct.toFixed(3);
+    }
+
+    // Best-effort: if the other team's name is already filled in, find their head-to-head
+    // game and auto-set the home/away toggle. Silently skipped if that lookup fails.
+    try {
+      const otherSide = side === 'A' ? 'B' : 'A';
+      const otherTeam = findTeam(txt(otherSide === 'A' ? 'teamAName' : 'teamBName'), teams);
+      if (otherTeam) {
+        const game = await findHeadToHeadGame(team.id, otherTeam.id);
+        if (game) {
+          const thisIsHome = game.teams.home.team.id === team.id;
+          const radio = document.querySelector('input[name="homeTeam"][value="' + (thisIsHome ? side : otherSide) + '"]');
+          if (radio) radio.checked = true;
+        }
+      }
+    } catch (e) { /* home/away auto-detect is best-effort only */ }
+
+    statusEl.textContent = 'Fetching last 7 days of boxscores…';
+    const l7 = await getTeamL7Stats(team.id);
+    if (l7.ops !== null) document.getElementById('ops' + side).value = l7.ops.toFixed(3);
+    if (l7.era !== null) document.getElementById('teamEra' + side).value = l7.era.toFixed(2);
+
+    statusEl.textContent = 'Finding probable starter…';
+    const pitcher = await getProbableStarter(team.id);
+    if (pitcher) {
+      const spStats = await getPitcherLast4ERA(pitcher.id, season);
+      if (spStats.era !== null) {
+        document.getElementById('spEra' + side).value = spStats.era.toFixed(2);
+        statusEl.textContent = '✓ ' + team.name + ' — ' + l7.gamesCounted + ' games (L7) · SP ' + pitcher.fullName + ' (' + spStats.starts + ' starts)';
+      } else {
+        statusEl.textContent = '✓ ' + team.name + ' — team stats loaded; ' + pitcher.fullName + ' has no starts logged yet this season.';
+      }
+    } else {
+      statusEl.textContent = '✓ ' + team.name + ' — team stats loaded; no probable starter found in the next 6 days.';
+    }
+
+    recalc();
+  } catch (err) {
+    statusEl.textContent = 'Fetch failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* =======================================================================
+   Lineup vs. opposing starter — each hitter's career at-bats against the
+   confirmed opposing starter, aggregated to a lineup OPS. Only available
+   once MLB posts starting lineups (~1-3h pre-game); tiny per-batter
+   samples are the norm, so this is shown as reference alongside a PA
+   count, not folded into the weighted model above.
+   ======================================================================= */
+
+async function findHeadToHeadGame(teamAId, teamBId) {
+  const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamAId + '&startDate=' + isoDaysFromNow(0) + '&endDate=' + isoDaysFromNow(10) + '&hydrate=probablePitcher');
+  for (const date of (sched.dates || [])) {
+    for (const g of date.games) {
+      const homeId = g.teams.home.team.id, awayId = g.teams.away.team.id;
+      if ((homeId === teamAId && awayId === teamBId) || (homeId === teamBId && awayId === teamAId)) return g;
+    }
+  }
+  return null;
+}
+
+async function getBoxscoreLineup(gamePk, isHome) {
+  const box = await mlbGet(MLB_API + '/game/' + gamePk + '/boxscore');
+  const side = isHome ? box.teams.home : box.teams.away;
+  return side.battingOrder || [];
+}
+
+async function getBatterVsPitcher(batterId, pitcherId) {
+  const data = await mlbGet(MLB_API + '/people/' + batterId + '/stats?stats=vsPlayerTotal&opposingPlayerId=' + pitcherId + '&group=hitting&sportId=1');
+  const splits = (data.stats && data.stats[0] && data.stats[0].splits) || [];
+  return splits.length ? splits[0].stat : null;
+}
+
+async function getPeopleNames(ids) {
+  if (!ids.length) return {};
+  const data = await mlbGet(MLB_API + '/people?personIds=' + ids.join(','));
+  const map = {};
+  (data.people || []).forEach(function (p) { map[p.id] = p.fullName; });
+  return map;
+}
+
+function renderMatchupTable(tableEl, rows) {
+  const tbody = tableEl.querySelector('tbody');
+  tbody.innerHTML = '';
+  rows.forEach(function (r) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + r.name + '</td><td>' + r.pa + '</td><td>' + r.ops + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// Sums raw AB/H/BB/HBP/SF/TB across the lineup before deriving OPS, same reasoning as the team L7 aggregation above.
+async function fetchLineupSide(lineupIds, pitcherId, tableEl) {
+  const names = await getPeopleNames(lineupIds);
+  let h = 0, ab = 0, bb = 0, hbp = 0, sf = 0, tb = 0, pa = 0;
+  const rows = [];
+  for (const batterId of lineupIds) {
+    const stat = await getBatterVsPitcher(batterId, pitcherId);
+    const name = names[batterId] || ('#' + batterId);
+    if (stat && stat.plateAppearances > 0) {
+      h += stat.hits; ab += stat.atBats; bb += stat.baseOnBalls; hbp += stat.hitByPitch; sf += stat.sacFlies; tb += stat.totalBases; pa += stat.plateAppearances;
+      rows.push({ name: name, pa: stat.plateAppearances, ops: stat.ops });
+    } else {
+      rows.push({ name: name, pa: 0, ops: '—' });
+    }
+  }
+  const obpDen = ab + bb + hbp + sf;
+  const ops = (obpDen > 0 && ab > 0) ? ((h + bb + hbp) / obpDen) + (tb / ab) : null;
+  renderMatchupTable(tableEl, rows);
+  return { ops: ops, pa: pa, battersWithHistory: rows.filter(function (r) { return r.pa > 0; }).length, lineupSize: lineupIds.length };
+}
+
+async function fetchLineupMatchup() {
+  const statusEl = document.getElementById('matchupStatus');
+  const btn = document.getElementById('fetchMatchupBtn');
+  const resultsEl = document.getElementById('matchupResults');
+  const nameA = txt('teamAName'), nameB = txt('teamBName');
+
+  btn.disabled = true;
+  resultsEl.classList.add('hidden');
+  statusEl.textContent = 'Looking up teams…';
+  try {
+    const teams = await getTeams();
+    const teamA = findTeam(nameA, teams);
+    const teamB = findTeam(nameB, teams);
+    if (!teamA || !teamB) {
+      statusEl.textContent = 'Could not match "' + nameA + '" and/or "' + nameB + '" to an MLB team.';
+      return;
+    }
+    applyTeamBadge('A', teamA);
+    applyTeamBadge('B', teamB);
+
+    statusEl.textContent = 'Finding the ' + teamA.teamName + ' vs ' + teamB.teamName + ' game…';
+    const game = await findHeadToHeadGame(teamA.id, teamB.id);
+    if (!game) {
+      statusEl.textContent = 'No scheduled game between the ' + teamA.teamName + ' and ' + teamB.teamName + ' in the next 10 days.';
+      return;
+    }
+
+    const aIsHome = game.teams.home.team.id === teamA.id;
+    const aSide = aIsHome ? game.teams.home : game.teams.away;
+    const bSide = aIsHome ? game.teams.away : game.teams.home;
+    const pitcherFacingA = bSide.probablePitcher; // A's lineup faces B's starter
+    const pitcherFacingB = aSide.probablePitcher;
+
+    if (!pitcherFacingA || !pitcherFacingB) {
+      statusEl.textContent = 'Probable starters aren\'t announced yet for this game.';
+      return;
+    }
+
+    statusEl.textContent = 'Fetching starting lineups…';
+    const lineupA = await getBoxscoreLineup(game.gamePk, aIsHome);
+    const lineupB = await getBoxscoreLineup(game.gamePk, !aIsHome);
+
+    if (!lineupA.length || !lineupB.length) {
+      statusEl.textContent = 'Lineups aren\'t posted yet for this game — MLB usually posts them 1–3 hours before first pitch. Try again closer to game time.';
+      return;
+    }
+
+    document.getElementById('matchupATitle').textContent = teamA.teamName + ' lineup vs ' + pitcherFacingA.fullName;
+    document.getElementById('matchupBTitle').textContent = teamB.teamName + ' lineup vs ' + pitcherFacingB.fullName;
+
+    statusEl.textContent = 'Pulling batter-vs-pitcher history for ' + (lineupA.length + lineupB.length) + ' hitters…';
+    const resA = await fetchLineupSide(lineupA, pitcherFacingA.id, document.getElementById('matchupATable'));
+    const resB = await fetchLineupSide(lineupB, pitcherFacingB.id, document.getElementById('matchupBTable'));
+
+    document.getElementById('matchupAOps').textContent = resA.ops !== null ? resA.ops.toFixed(3) : 'no history';
+    document.getElementById('matchupBOps').textContent = resB.ops !== null ? resB.ops.toFixed(3) : 'no history';
+    document.getElementById('matchupASample').textContent = resA.battersWithHistory + '/' + resA.lineupSize + ' hitters have faced him · ' + resA.pa + ' combined PA' + (resA.pa < 20 ? ' — tiny sample, weight lightly' : '');
+    document.getElementById('matchupBSample').textContent = resB.battersWithHistory + '/' + resB.lineupSize + ' hitters have faced him · ' + resB.pa + ' combined PA' + (resB.pa < 20 ? ' — tiny sample, weight lightly' : '');
+
+    resultsEl.classList.remove('hidden');
+    statusEl.textContent = '✓ Loaded.';
+  } catch (err) {
+    statusEl.textContent = 'Fetch failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* =======================================================================
+   Trade log — persisted in this browser's localStorage only (not synced
+   anywhere). Lets you track realized results against the model's edge.
+   ======================================================================= */
+
+const LOG_KEY = 'kalshiValueModelTradeLog';
+
+function loadLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveLog(entries) { localStorage.setItem(LOG_KEY, JSON.stringify(entries)); }
+
+function logCurrentTrade() {
+  if (!lastCalc) {
+    alert('Enter both teams\' data first so there\'s a calculated price and edge to log.');
+    return;
+  }
+  const betInput = document.getElementById('betAmount');
+  const stake = parseFloat(betInput.value);
+  if (!stake || stake <= 0) {
+    alert('Enter how much you\'re wagering first.');
+    return;
+  }
+
+  const entries = loadLog();
+  entries.push({
+    id: Date.now(),
+    date: new Date().toISOString().slice(0, 10),
+    matchup: lastCalc.nameA + ' vs ' + lastCalc.nameB,
+    side: lastCalc.side === 'A' ? lastCalc.nameA : lastCalc.nameB,
+    price: lastCalc.price,       // the price you had entered for that team when you ran the calc
+    model: lastCalc.model,
+    edge: lastCalc.edge,
+    stakeDollars: stake,          // what you actually wagered
+    result: 'pending'
+  });
+  saveLog(entries);
+  betInput.value = '';
+  renderLog();
+}
+
+function exportLog() {
+  const blob = new Blob([JSON.stringify(loadLog(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kalshi-trade-log-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importLog(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function () {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('not an array');
+      const existing = loadLog();
+      const existingIds = new Set(existing.map(function (e) { return e.id; }));
+      const merged = existing.concat(imported.filter(function (e) { return !existingIds.has(e.id); }));
+      saveLog(merged);
+      renderLog();
+      alert('Imported ' + imported.length + ' entries (merged with your existing log; duplicates skipped).');
+    } catch (err) {
+      alert('Could not read that file as a trade log export.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function setTradeResult(id, result) {
+  const entries = loadLog();
+  const e = entries.find(function (x) { return x.id === id; });
+  if (e) e.result = result;
+  saveLog(entries);
+  renderLog();
+}
+
+function deleteTrade(id) {
+  saveLog(loadLog().filter(function (x) { return x.id !== id; }));
+  renderLog();
+}
+
+function tradePL(entry) {
+  if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
+  if (entry.result === 'loss') return -entry.stakeDollars;
+  return null;
+}
+
+function renderLog() {
+  const entries = loadLog();
+  const tbody = document.getElementById('logTbody');
+  tbody.innerHTML = '';
+  let totalPL = 0, settled = 0, wins = 0;
+
+  entries.slice().reverse().forEach(function (e) {
+    const pl = tradePL(e);
+    const toWin = e.stakeDollars * (1 - e.price) / e.price;
+    if (e.result !== 'pending') { settled++; if (e.result === 'win') wins++; totalPL += pl; }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + e.date + '</td>' +
+      '<td>' + e.matchup + '</td>' +
+      '<td>' + e.side + '</td>' +
+      '<td>' + Math.round(e.price * 100) + '¢</td>' +
+      '<td>' + (e.model * 100).toFixed(1) + '%</td>' +
+      '<td>' + (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts</td>' +
+      '<td>$' + e.stakeDollars.toFixed(2) + '</td>' +
+      '<td>+$' + toWin.toFixed(2) + '</td>' +
+      '<td></td><td></td><td></td>';
+
+    const select = document.createElement('select');
+    ['pending', 'win', 'loss'].forEach(function (opt) {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if (opt === e.result) o.selected = true;
+      select.appendChild(o);
+    });
+    select.addEventListener('change', function () { setTradeResult(e.id, select.value); });
+    tr.children[8].appendChild(select);
+
+    const plTd = tr.children[9];
+    if (pl !== null) {
+      plTd.textContent = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+      plTd.className = pl >= 0 ? 'pl-pos' : 'pl-neg';
+    } else {
+      plTd.textContent = '—';
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button'; delBtn.className = 'btn'; delBtn.textContent = '✕';
+    delBtn.addEventListener('click', function () { deleteTrade(e.id); });
+    tr.children[10].appendChild(delBtn);
+
+    tbody.appendChild(tr);
+  });
+
+  const summary = document.getElementById('logSummary');
+  if (entries.length === 0) {
+    summary.textContent = 'No trades logged yet.';
+  } else {
+    const winRate = settled > 0 ? (wins / settled * 100).toFixed(0) + '%' : '—';
+    summary.innerHTML = entries.length + ' logged &middot; ' + settled + ' settled &middot; win rate ' + winRate +
+      ' &middot; total P/L <span class="' + (totalPL >= 0 ? 'pl-pos' : 'pl-neg') + '">' +
+      (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> &middot; stored locally in this browser only';
+  }
+}
+
+renderLog();
+
+// Load the team list in the background so typing+leaving a name field can badge it
+// immediately, without waiting on the heavier "Fetch live data" flow.
+getTeams().catch(function () {});
+document.getElementById('teamAName').addEventListener('blur', function () { resolveAndBadge('A'); });
+document.getElementById('teamBName').addEventListener('blur', function () { resolveAndBadge('B'); });
+</script>
+
+</body>
+</html>
