@@ -291,6 +291,17 @@
     padding: 3px 6px;
     font-size: 12.5px;
   }
+  .cashout-input {
+    background: var(--panel-alt);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12.5px;
+    width: 92px;
+    margin-left: 6px;
+  }
+  .cashout-input:focus { outline: none; border-color: var(--accent); }
   .pl-pos { color: var(--pos); }
   .pl-neg { color: var(--neg); }
 
@@ -1296,9 +1307,21 @@ function deleteTrade(id) {
   renderLog();
 }
 
+function setTradeCashOut(id, amount) {
+  const entries = loadLog();
+  const e = entries.find(function (x) { return x.id === id; });
+  if (e) e.cashOutAmount = isNaN(amount) ? null : amount;
+  saveLog(entries);
+  renderLog();
+}
+
 function tradePL(entry) {
   if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
   if (entry.result === 'loss') return -entry.stakeDollars;
+  if (entry.result === 'cashout') {
+    if (entry.cashOutAmount === undefined || entry.cashOutAmount === null || isNaN(entry.cashOutAmount)) return null;
+    return entry.cashOutAmount - entry.stakeDollars;
+  }
   return null;
 }
 
@@ -1311,7 +1334,8 @@ function renderLog() {
   entries.slice().reverse().forEach(function (e) {
     const pl = tradePL(e);
     const toWin = e.stakeDollars * (1 - e.price) / e.price;
-    if (e.result !== 'pending') { settled++; if (e.result === 'win') wins++; totalPL += pl; }
+    // A "cashed out" trade isn't resolved until an amount is entered, so pl stays null until then.
+    if (pl !== null) { settled++; if (pl > 0) wins++; totalPL += pl; }
 
     const tr = document.createElement('tr');
     tr.innerHTML =
@@ -1326,14 +1350,26 @@ function renderLog() {
       '<td></td><td></td><td></td>';
 
     const select = document.createElement('select');
-    ['pending', 'win', 'loss'].forEach(function (opt) {
+    [['pending', 'pending'], ['win', 'win'], ['loss', 'loss'], ['cashout', 'cashed out']].forEach(function (opt) {
       const o = document.createElement('option');
-      o.value = opt; o.textContent = opt;
-      if (opt === e.result) o.selected = true;
+      o.value = opt[0]; o.textContent = opt[1];
+      if (opt[0] === e.result) o.selected = true;
       select.appendChild(o);
     });
     select.addEventListener('change', function () { setTradeResult(e.id, select.value); });
     tr.children[8].appendChild(select);
+
+    if (e.result === 'cashout') {
+      const cashInput = document.createElement('input');
+      cashInput.type = 'number';
+      cashInput.step = '0.01';
+      cashInput.min = '0';
+      cashInput.placeholder = 'Cash out $';
+      cashInput.className = 'cashout-input';
+      if (e.cashOutAmount !== undefined && e.cashOutAmount !== null) cashInput.value = e.cashOutAmount;
+      cashInput.addEventListener('change', function () { setTradeCashOut(e.id, parseFloat(cashInput.value)); });
+      tr.children[8].appendChild(cashInput);
+    }
 
     const plTd = tr.children[9];
     if (pl !== null) {
