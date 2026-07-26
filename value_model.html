@@ -450,10 +450,6 @@
         <input type="number" id="opsA" step="0.001" value="0.740">
       </div>
       <div class="field">
-        <label for="teamEraA">Last 7 days team ERA</label>
-        <input type="number" id="teamEraA" step="0.01" value="3.90">
-      </div>
-      <div class="field">
         <label for="bullpenEraA">Last 7 days bullpen ERA</label>
         <input type="number" id="bullpenEraA" step="0.01" value="4.00">
       </div>
@@ -483,10 +479,6 @@
       <div class="field">
         <label for="opsB">Last 7 days team OPS</label>
         <input type="number" id="opsB" step="0.001" value="0.700">
-      </div>
-      <div class="field">
-        <label for="teamEraB">Last 7 days team ERA</label>
-        <input type="number" id="teamEraB" step="0.01" value="4.30">
       </div>
       <div class="field">
         <label for="bullpenEraB">Last 7 days bullpen ERA</label>
@@ -556,9 +548,8 @@
 
     <div class="adv-sub">Component weights (auto-normalized to sum to 1)</div>
     <div class="adv-grid">
-      <div class="field"><label for="wSpEra">Starting pitcher ERA</label><input type="number" id="wSpEra" step="0.01" value="0.25"></div>
-      <div class="field"><label for="wTeamEra">Team L7 ERA</label><input type="number" id="wTeamEra" step="0.01" value="0.15"></div>
-      <div class="field"><label for="wBullpenEra">Bullpen L7 ERA</label><input type="number" id="wBullpenEra" step="0.01" value="0.10"></div>
+      <div class="field"><label for="wSpEra">Starting pitcher ERA</label><input type="number" id="wSpEra" step="0.01" value="0.30"></div>
+      <div class="field"><label for="wBullpenEra">Bullpen L7 ERA</label><input type="number" id="wBullpenEra" step="0.01" value="0.15"></div>
       <div class="field"><label for="wOps">Team L7 OPS</label><input type="number" id="wOps" step="0.01" value="0.20"></div>
       <div class="field"><label for="wWin">L10 win%</label><input type="number" id="wWin" step="0.01" value="0.15"></div>
       <div class="field"><label for="wHomeAway">Home/away win%</label><input type="number" id="wHomeAway" step="0.01" value="0.15"></div>
@@ -568,8 +559,6 @@
     <div class="adv-grid">
       <div class="field"><label for="opsMean">OPS mean</label><input type="number" id="opsMean" step="0.001" value="0.720"></div>
       <div class="field"><label for="opsSd">OPS st. dev.</label><input type="number" id="opsSd" step="0.001" value="0.090"></div>
-      <div class="field"><label for="teamEraMean">Team ERA mean</label><input type="number" id="teamEraMean" step="0.01" value="4.10"></div>
-      <div class="field"><label for="teamEraSd">Team ERA st. dev.</label><input type="number" id="teamEraSd" step="0.01" value="1.10"></div>
       <div class="field"><label for="bullpenEraMean">Bullpen ERA mean</label><input type="number" id="bullpenEraMean" step="0.01" value="4.10"></div>
       <div class="field"><label for="bullpenEraSd">Bullpen ERA st. dev.</label><input type="number" id="bullpenEraSd" step="0.01" value="1.10"></div>
       <div class="field"><label for="spEraMean">SP ERA mean</label><input type="number" id="spEraMean" step="0.01" value="4.00"></div>
@@ -667,7 +656,7 @@
   <details class="howitworks">
     <summary>How this model works</summary>
     <div class="steps">
-      <p><strong>1. Composite rating.</strong> Each of the 6 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>), so OPS, team ERA, bullpen ERA, win%, SP ERA, and home/away win% become comparable numbers. ERA z-scores (team, bullpen, and SP) are inverted since lower ERA is better. Bullpen ERA covers every reliever who's pitched in a team's last 7 games (i.e. everyone but that game's starter) &mdash; a separate signal from team ERA, since a team can have a strong rotation and a shaky pen or vice versa. Only the split matching where each team is actually playing &mdash; home win% for the home team, away win% for the away team &mdash; feeds in; the other split stays visible but unused. The six z-scores are combined with your weights into a single Team Strength Index (TSI).</p>
+      <p><strong>1. Composite rating.</strong> Each of the 5 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>), so OPS, bullpen ERA, win%, SP ERA, and home/away win% become comparable numbers. ERA z-scores (bullpen and SP) are inverted since lower ERA is better. Bullpen ERA covers every reliever who's pitched in a team's last 7 games (i.e. everyone but that game's starter). Only the split matching where each team is actually playing &mdash; home win% for the home team, away win% for the away team &mdash; feeds in; the other split stays visible but unused. The five z-scores are combined with your weights into a single Team Strength Index (TSI).</p>
       <p><strong>2. Implied win%.</strong> Each team's TSI is passed through a logistic curve, dampened by the &ldquo;confidence dampening&rdquo; constant, so a strong composite edge still tops out around 65&ndash;70% &mdash; consistent with how much single-game variance real baseball has.</p>
       <p><strong>3. Head-to-head via log5.</strong> The two teams' implied win%s (p<sub>A</sub>, p<sub>B</sub>) are combined with Bill James' log5 formula: <code>P(A) = (p<sub>A</sub> &minus; p<sub>A</sub>p<sub>B</sub>) / (p<sub>A</sub> + p<sub>B</sub> &minus; 2p<sub>A</sub>p<sub>B</sub>)</code>. This is the model's final win probability.</p>
       <p><strong>4. De-vig the market.</strong> If you enter both Kalshi prices, they're normalized to sum to 100% (<code>priceA / (priceA + priceB)</code>) so the comparison isn't partly just the exchange's spread.</p>
@@ -713,14 +702,13 @@ function fmtPts(x) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + ' pts';
 function val(id) { return parseFloat(document.getElementById(id).value); }
 function txt(id) { return document.getElementById(id).value.trim(); }
 
-function compositeTSI(ops, teamEra, bullpenEra, winPct, spEra, homeAwayWinPct, weights, base) {
+function compositeTSI(ops, bullpenEra, winPct, spEra, homeAwayWinPct, weights, base) {
   const opsZ = z(ops, base.opsMean, base.opsSd);
-  const teamEraZ = -z(teamEra, base.teamEraMean, base.teamEraSd);
   const bullpenEraZ = -z(bullpenEra, base.bullpenEraMean, base.bullpenEraSd);
   const winZ = z(winPct, 0.5, base.winSd);
   const spEraZ = -z(spEra, base.spEraMean, base.spEraSd);
   const homeAwayZ = z(homeAwayWinPct, 0.5, base.homeAwaySd);
-  return weights.spEra * spEraZ + weights.teamEra * teamEraZ + weights.bullpenEra * bullpenEraZ +
+  return weights.spEra * spEraZ + weights.bullpenEra * bullpenEraZ +
     weights.ops * opsZ + weights.win * winZ + weights.homeAway * homeAwayZ;
 }
 
@@ -736,17 +724,16 @@ function recalc() {
 
   // Weights, auto-normalized
   let w = {
-    spEra: val('wSpEra'), teamEra: val('wTeamEra'), bullpenEra: val('wBullpenEra'),
+    spEra: val('wSpEra'), bullpenEra: val('wBullpenEra'),
     ops: val('wOps'), win: val('wWin'), homeAway: val('wHomeAway')
   };
-  const wSum = w.spEra + w.teamEra + w.bullpenEra + w.ops + w.win + w.homeAway;
+  const wSum = w.spEra + w.bullpenEra + w.ops + w.win + w.homeAway;
   if (wSum > 0) {
-    w.spEra /= wSum; w.teamEra /= wSum; w.bullpenEra /= wSum; w.ops /= wSum; w.win /= wSum; w.homeAway /= wSum;
+    w.spEra /= wSum; w.bullpenEra /= wSum; w.ops /= wSum; w.win /= wSum; w.homeAway /= wSum;
   }
 
   const base = {
     opsMean: val('opsMean'), opsSd: val('opsSd'),
-    teamEraMean: val('teamEraMean'), teamEraSd: val('teamEraSd'),
     bullpenEraMean: val('bullpenEraMean'), bullpenEraSd: val('bullpenEraSd'),
     spEraMean: val('spEraMean'), spEraSd: val('spEraSd'),
     winSd: val('winSd'), homeAwaySd: val('homeAwaySd')
@@ -759,8 +746,8 @@ function recalc() {
   const homeAwayA = homeTeam === 'A' ? val('homeWinPctA') : val('awayWinPctA');
   const homeAwayB = homeTeam === 'B' ? val('homeWinPctB') : val('awayWinPctB');
 
-  const tsiA = compositeTSI(val('opsA'), val('teamEraA'), val('bullpenEraA'), val('l10A') / 10, val('spEraA'), homeAwayA, w, base);
-  const tsiB = compositeTSI(val('opsB'), val('teamEraB'), val('bullpenEraB'), val('l10B') / 10, val('spEraB'), homeAwayB, w, base);
+  const tsiA = compositeTSI(val('opsA'), val('bullpenEraA'), val('l10A') / 10, val('spEraA'), homeAwayA, w, base);
+  const tsiB = compositeTSI(val('opsB'), val('bullpenEraB'), val('l10B') / 10, val('spEraB'), homeAwayB, w, base);
 
   const impliedA = logistic(tsiA, scale);
   const impliedB = logistic(tsiB, scale);
@@ -988,19 +975,17 @@ async function getTeamL7Stats(teamId) {
     });
   });
 
-  let h = 0, ab = 0, bb = 0, hbp = 0, sf = 0, tb = 0, er = 0, outs = 0;
+  let h = 0, ab = 0, bb = 0, hbp = 0, sf = 0, tb = 0;
   let bpEr = 0, bpOuts = 0;
   for (const g of games) {
     const box = await mlbGet(MLB_API + '/game/' + g.gamePk + '/boxscore');
     const isHome = g.teams.home.team.id === teamId;
     const side = isHome ? box.teams.home : box.teams.away;
     const bat = side.teamStats.batting;
-    const pit = side.teamStats.pitching;
     h += bat.hits; ab += bat.atBats; bb += bat.baseOnBalls; hbp += bat.hitByPitch; sf += bat.sacFlies; tb += bat.totalBases;
-    er += pit.earnedRuns; outs += parseIPtoOuts(pit.inningsPitched);
 
     // Bullpen = everyone but the starter (side.pitchers[0], the same convention used for
-    // probable-starter lookups elsewhere) -- sum their lines separately from the team total above.
+    // probable-starter lookups elsewhere).
     const relieverIds = (side.pitchers || []).slice(1);
     relieverIds.forEach(function (pid) {
       const st = side.players && side.players['ID' + pid] && side.players['ID' + pid].stats.pitching;
@@ -1011,9 +996,8 @@ async function getTeamL7Stats(teamId) {
 
   const obpDen = ab + bb + hbp + sf;
   const ops = (obpDen > 0 && ab > 0) ? ((h + bb + hbp) / obpDen) + (tb / ab) : null;
-  const era = outs > 0 ? (er * 27) / outs : null;
   const bullpenEra = bpOuts > 0 ? (bpEr * 27) / bpOuts : null;
-  return { ops: ops, era: era, bullpenEra: bullpenEra, gamesCounted: games.length };
+  return { ops: ops, bullpenEra: bullpenEra, gamesCounted: games.length };
 }
 
 async function getProbableStarter(teamId) {
@@ -1084,7 +1068,6 @@ async function fetchTeamData(side) {
     statusEl.textContent = 'Fetching last 7 days of boxscores…';
     const l7 = await getTeamL7Stats(team.id);
     if (l7.ops !== null) document.getElementById('ops' + side).value = l7.ops.toFixed(3);
-    if (l7.era !== null) document.getElementById('teamEra' + side).value = l7.era.toFixed(2);
     if (l7.bullpenEra !== null) document.getElementById('bullpenEra' + side).value = l7.bullpenEra.toFixed(2);
 
     statusEl.textContent = 'Finding probable starter…';
