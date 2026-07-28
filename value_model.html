@@ -673,6 +673,37 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:22px;" id="dataCard">
+    <h2>Matchup Data &amp; Analysis</h2>
+    <div class="log-controls">
+      <button type="button" class="btn" onclick="recordMatchup()">Record this matchup</button>
+      <button type="button" class="btn" onclick="exportMatchupData()">Export .json</button>
+      <button type="button" class="btn" onclick="document.getElementById('importMatchupFile').click()">Import .json</button>
+      <input type="file" id="importMatchupFile" accept="application/json" class="hidden" onchange="importMatchupData(event)">
+    </div>
+    <div class="fetch-status" style="margin-bottom:10px;">Snapshots every stat currently on screen for both teams, so you can check later which ones actually tracked the winner. Set the Result once the game's final.</div>
+    <div class="log-summary" id="matchupDataSummary">No matchups recorded yet.</div>
+    <div style="overflow-x:auto; margin-top:12px;">
+      <table class="log-table">
+        <thead>
+          <tr><th>Date</th><th>Matchup</th><th>Model pick</th><th>Market pick</th><th>Result</th><th></th></tr>
+        </thead>
+        <tbody id="matchupDataTbody"></tbody>
+      </table>
+    </div>
+
+    <div class="adv-sub" style="margin-top:22px;">Stat accuracy (settled matchups only)</div>
+    <div style="overflow-x:auto;">
+      <table class="log-table">
+        <thead>
+          <tr><th>Stat</th><th>Accuracy</th><th>Sample</th><th>Rolling trend</th></tr>
+        </thead>
+        <tbody id="statAccuracyTbody"></tbody>
+      </table>
+    </div>
+    <div class="sample-note">"Accuracy" = how often the team with the better pre-game number for that stat (lower ERA, higher everything else) actually won &mdash; a coin flip is 50%. Ties and matchups with no result yet are excluded. The rolling trend plots that accuracy after each additional settled result, oldest to newest, so you can see whether a stat is actually stabilizing or just had a lucky run. Needs a decent sample (10-20+ settled matchups) before any of this means much.</div>
+  </div>
+
   <details class="howitworks">
     <summary>How this model works</summary>
     <div class="steps">
@@ -844,7 +875,18 @@ function recalc() {
   }
 
   // Snapshot for the trade log — "Log this trade" reads this instead of recomputing.
-  lastCalc = { nameA: nameA, nameB: nameB, side: side, edge: edge, price: price, model: model, stakeFrac: stakeFrac, bankroll: bankroll };
+  // Also read by "Record This Matchup" in the Data section below, which needs both sides'
+  // numbers (not just the recommended side) to later check which stats tracked the winner.
+  lastCalc = {
+    nameA: nameA, nameB: nameB, side: side, edge: edge, price: price, model: model, stakeFrac: stakeFrac, bankroll: bankroll,
+    homeTeam: homeTeam, modelA: modelA, modelB: modelB, marketA: marketA, marketB: marketB,
+    opsA: val('opsA'), opsB: val('opsB'),
+    bullpenEraA: val('bullpenEraA'), bullpenEraB: val('bullpenEraB'),
+    spEraA: val('spEraA'), spEraB: val('spEraB'),
+    seasonSpEraA: val('seasonSpEraA'), seasonSpEraB: val('seasonSpEraB'),
+    l10A: val('l10A') / 10, l10B: val('l10B') / 10,
+    homeAwayA: homeAwayA, homeAwayB: homeAwayB
+  };
 }
 
 document.querySelectorAll('input').forEach(function (el) {
@@ -1444,6 +1486,206 @@ function renderLog() {
 }
 
 renderLog();
+
+/* =======================================================================
+   Matchup data & analysis — records every stat on screen for a matchup
+   (not just the recommended side, unlike the trade log above) plus the
+   actual winner once known, so the per-stat accuracy analysis below can
+   check which numbers actually tracked results over time. Persisted in
+   this browser's localStorage only, same as the trade log.
+   ======================================================================= */
+
+const MATCHUP_DATA_KEY = 'kalshiValueModelMatchupData';
+
+// Every stat tracked for accuracy analysis, and which direction favors a win.
+// Keys must match the "<key>A" / "<key>B" fields saved by recordMatchup() below.
+const TRACKED_STATS = [
+  { key: 'ops', label: 'Team L7 OPS', higherBetter: true },
+  { key: 'bullpenEra', label: 'Bullpen L7 ERA', higherBetter: false },
+  { key: 'spEra', label: 'SP ERA (L4)', higherBetter: false },
+  { key: 'seasonSpEra', label: 'SP ERA (season)', higherBetter: false },
+  { key: 'l10', label: 'L10 win%', higherBetter: true },
+  { key: 'homeAway', label: 'Home/away win%', higherBetter: true },
+  { key: 'model', label: 'Model probability', higherBetter: true },
+  { key: 'market', label: 'Market probability', higherBetter: true }
+];
+
+function loadMatchupData() {
+  try { return JSON.parse(localStorage.getItem(MATCHUP_DATA_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveMatchupData(entries) { localStorage.setItem(MATCHUP_DATA_KEY, JSON.stringify(entries)); }
+
+function recordMatchup() {
+  if (!lastCalc) {
+    alert('Enter/fetch both teams\' data first so there\'s a matchup to record.');
+    return;
+  }
+  const entries = loadMatchupData();
+  entries.push({
+    id: Date.now(),
+    date: new Date().toISOString().slice(0, 10),
+    nameA: lastCalc.nameA, nameB: lastCalc.nameB,
+    homeTeam: lastCalc.homeTeam,
+    modelA: lastCalc.modelA, modelB: lastCalc.modelB,
+    marketA: lastCalc.marketA, marketB: lastCalc.marketB,
+    opsA: lastCalc.opsA, opsB: lastCalc.opsB,
+    bullpenEraA: lastCalc.bullpenEraA, bullpenEraB: lastCalc.bullpenEraB,
+    spEraA: lastCalc.spEraA, spEraB: lastCalc.spEraB,
+    seasonSpEraA: lastCalc.seasonSpEraA, seasonSpEraB: lastCalc.seasonSpEraB,
+    l10A: lastCalc.l10A, l10B: lastCalc.l10B,
+    homeAwayA: lastCalc.homeAwayA, homeAwayB: lastCalc.homeAwayB,
+    result: 'pending' // set once the game's final: 'A' or 'B'
+  });
+  saveMatchupData(entries);
+  renderMatchupData();
+}
+
+function exportMatchupData() {
+  const blob = new Blob([JSON.stringify(loadMatchupData(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kalshi-matchup-data-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importMatchupData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function () {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('not an array');
+      const existing = loadMatchupData();
+      const existingIds = new Set(existing.map(function (e) { return e.id; }));
+      const merged = existing.concat(imported.filter(function (e) { return !existingIds.has(e.id); }));
+      saveMatchupData(merged);
+      renderMatchupData();
+      alert('Imported ' + imported.length + ' entries (merged with your existing data; duplicates skipped).');
+    } catch (err) {
+      alert('Could not read that file as a matchup data export.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function setMatchupResult(id, result) {
+  const entries = loadMatchupData();
+  const e = entries.find(function (x) { return x.id === id; });
+  if (e) e.result = result;
+  saveMatchupData(entries);
+  renderMatchupData();
+}
+
+function deleteMatchup(id) {
+  saveMatchupData(loadMatchupData().filter(function (x) { return x.id !== id; }));
+  renderMatchupData();
+}
+
+// Small inline sparkline, no library — just a polyline in a tiny SVG. `series` is a list of
+// 0-100 accuracy values in chronological order; a dashed line marks the 50% coin-flip baseline.
+function sparklineSVG(series) {
+  const w = 90, h = 26, pad = 2;
+  if (series.length < 2) return '<span style="color:var(--ink-faint);">not enough data yet</span>';
+  const stepX = (w - pad * 2) / (series.length - 1);
+  const toY = function (v) { return h - pad - (v / 100) * (h - pad * 2); };
+  const points = series.map(function (v, i) { return (pad + i * stepX).toFixed(1) + ',' + toY(v).toFixed(1); }).join(' ');
+  const baseline = toY(50).toFixed(1);
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+    '<line x1="' + pad + '" y1="' + baseline + '" x2="' + (w - pad) + '" y2="' + baseline + '" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="2,2"/>' +
+    '<polyline points="' + points + '" fill="none" stroke="var(--accent)" stroke-width="1.6"/>' +
+    '</svg>';
+}
+
+// For each tracked stat, walks settled matchups oldest-to-newest and checks whether the team
+// with the "better" number (accounting for higherBetter) actually won. Ties/missing values are
+// skipped for that stat only, not dropped from the whole matchup. Returns overall accuracy, the
+// sample size, and the rolling cumulative-accuracy series (for the sparkline).
+function computeStatAccuracy(entries) {
+  const settled = entries.filter(function (e) { return e.result === 'A' || e.result === 'B'; })
+    .slice().sort(function (a, b) { return a.id - b.id; });
+
+  return TRACKED_STATS.map(function (stat) {
+    let correct = 0, total = 0;
+    const series = [];
+    settled.forEach(function (e) {
+      const a = e[stat.key + 'A'], b = e[stat.key + 'B'];
+      if (a === null || a === undefined || isNaN(a) || b === null || b === undefined || isNaN(b) || a === b) return;
+      const prediction = (a > b) === stat.higherBetter ? 'A' : 'B';
+      total++;
+      if (prediction === e.result) correct++;
+      series.push((correct / total) * 100);
+    });
+    return { label: stat.label, correct: correct, total: total, series: series };
+  });
+}
+
+function renderStatAccuracy() {
+  const entries = loadMatchupData();
+  const stats = computeStatAccuracy(entries);
+  const tbody = document.getElementById('statAccuracyTbody');
+  tbody.innerHTML = '';
+  stats.forEach(function (s) {
+    const tr = document.createElement('tr');
+    const acc = s.total > 0 ? ((s.correct / s.total) * 100).toFixed(1) + '%' : '—';
+    tr.innerHTML =
+      '<td>' + s.label + '</td>' +
+      '<td>' + acc + '</td>' +
+      '<td>' + s.total + '</td>' +
+      '<td>' + sparklineSVG(s.series) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderMatchupData() {
+  const entries = loadMatchupData();
+  const tbody = document.getElementById('matchupDataTbody');
+  tbody.innerHTML = '';
+
+  entries.slice().reverse().forEach(function (e) {
+    const tr = document.createElement('tr');
+    const modelPick = e.modelA >= e.modelB ? e.nameA : e.nameB;
+    const marketPick = e.marketA >= e.marketB ? e.nameA : e.nameB;
+    tr.innerHTML =
+      '<td>' + e.date + '</td>' +
+      '<td>' + e.nameA + ' vs ' + e.nameB + '</td>' +
+      '<td>' + modelPick + '</td>' +
+      '<td>' + marketPick + '</td>' +
+      '<td></td><td></td>';
+
+    const select = document.createElement('select');
+    [['pending', 'pending'], ['A', e.nameA + ' won'], ['B', e.nameB + ' won']].forEach(function (opt) {
+      const o = document.createElement('option');
+      o.value = opt[0]; o.textContent = opt[1];
+      if (opt[0] === e.result) o.selected = true;
+      select.appendChild(o);
+    });
+    select.addEventListener('change', function () { setMatchupResult(e.id, select.value); });
+    tr.children[4].appendChild(select);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button'; delBtn.className = 'btn'; delBtn.textContent = '✕';
+    delBtn.addEventListener('click', function () { deleteMatchup(e.id); });
+    tr.children[5].appendChild(delBtn);
+
+    tbody.appendChild(tr);
+  });
+
+  const settledCount = entries.filter(function (e) { return e.result !== 'pending'; }).length;
+  const summary = document.getElementById('matchupDataSummary');
+  summary.textContent = entries.length === 0 ? 'No matchups recorded yet.' :
+    entries.length + ' recorded · ' + settledCount + ' settled · stored locally in this browser only';
+
+  renderStatAccuracy();
+}
+
+renderMatchupData();
 
 // Load the team list in the background so typing+leaving a name field can badge it
 // immediately, without waiting on the heavier "Fetch live data" flow.
