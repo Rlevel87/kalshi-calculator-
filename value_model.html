@@ -1071,6 +1071,10 @@ async function getProbableStarter(teamId) {
   const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamId + '&startDate=' + isoDaysFromNow(0) + '&endDate=' + isoDaysFromNow(6) + '&hydrate=probablePitcher');
   for (const date of (sched.dates || [])) {
     for (const g of date.games) {
+      // Skip games that have already finished -- on a doubleheader day the first game of the
+      // two can still be sitting right alongside the real upcoming one, with its own (by then
+      // stale) probable-pitcher data still attached, and would otherwise get returned first.
+      if (g.status.abstractGameState === 'Final') continue;
       const isHome = g.teams.home.team.id === teamId;
       const side = isHome ? g.teams.home : g.teams.away;
       if (side.probablePitcher && side.probablePitcher.id) return side.probablePitcher;
@@ -1182,6 +1186,9 @@ async function findHeadToHeadGame(teamAId, teamBId) {
   const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamAId + '&startDate=' + isoDaysFromNow(0) + '&endDate=' + isoDaysFromNow(10) + '&hydrate=probablePitcher');
   for (const date of (sched.dates || [])) {
     for (const g of date.games) {
+      // Same doubleheader issue as getProbableStarter above -- skip the already-finished game
+      // of the day so this doesn't hand back stale lineups/starters for a game that's over.
+      if (g.status.abstractGameState === 'Final') continue;
       const homeId = g.teams.home.team.id, awayId = g.teams.away.team.id;
       if ((homeId === teamAId && awayId === teamBId) || (homeId === teamBId && awayId === teamAId)) return g;
     }
