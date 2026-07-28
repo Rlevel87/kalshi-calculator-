@@ -39,6 +39,14 @@
     border-bottom: 1px solid var(--rule);
     background: var(--panel-alt);
   }
+  .back-link {
+    display: inline-block;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    margin-bottom: 10px;
+  }
+  .back-link:hover { color: var(--accent); }
   header h1 {
     margin: 0 0 6px;
     font-size: 22px;
@@ -387,6 +395,7 @@
 <body>
 
 <header>
+  <a class="back-link" href="index.html">&larr; All sports</a>
   <h1>Rob's kalshi MLB Value Model</h1>
   <p>Compares a recent-form power rating for each team against Kalshi's market-implied probability to surface mispriced contracts. Enter both sides' Kalshi prices when you have them &mdash; the model de-vigs the market before comparing.</p>
 </header>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rob's Kalshi Value Models</title>
+<style>
+  :root {
+    --bg: #0e1416;
+    --panel: #161f22;
+    --panel-alt: #10171a;
+    --rule: #26343a;
+    --ink: #e7eef0;
+    --ink-muted: #8fa3a9;
+    --ink-faint: #5c6e73;
+    --accent: #4fb0c6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  header {
+    padding: 32px 24px 22px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel-alt);
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-muted); font-size: 14px; max-width: 60ch; }
+
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 24px 60px; }
+
+  .sport-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .sport-tile {
+    position: relative;
+    display: block;
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    border: 1px solid var(--rule);
+    background: linear-gradient(160deg, var(--tile-a), var(--tile-b));
+    min-height: 140px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .sport-tile.active:hover { transform: translateY(-2px); border-color: var(--tile-a); }
+  .sport-tile.disabled { opacity: 0.55; cursor: default; pointer-events: none; }
+
+  .sport-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 100%);
+  }
+  .tile-content { position: relative; z-index: 1; }
+  .sport-name { font-size: 17px; font-weight: 700; margin-bottom: 4px; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+  .sport-status {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .sport-tile.active .sport-status { background: rgba(76, 175, 125, 0.22); color: #7fd9a8; }
+  .sport-tile.disabled .sport-status { background: rgba(255, 255, 255, 0.1); color: var(--ink-muted); }
+
+  .disclaimer {
+    margin-top: 26px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    max-width: 70ch;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Rob's Kalshi Value Models</h1>
+  <p>Compares a recent-form power rating against Kalshi's market-implied probability to surface mispriced contracts, one sport at a time.</p>
+</header>
+
+<div class="wrap">
+  <div class="sport-grid">
+    <a class="sport-tile active" href="value_model.html" style="--tile-a:#002D62; --tile-b:#EB6E1F;">
+      <div class="tile-content">
+        <div class="sport-name">Baseball</div>
+        <div class="sport-status">Ready</div>
+      </div>
+    </a>
+    <a class="sport-tile disabled" href="#" style="--tile-a:#03202F; --tile-b:#A71930;">
+      <div class="tile-content">
+        <div class="sport-name">Football</div>
+        <div class="sport-status">Coming soon</div>
+      </div>
+    </a>
+    <a class="sport-tile disabled" href="#" style="--tile-a:#CE1141; --tile-b:#3a3a3a;">
+      <div class="tile-content">
+        <div class="sport-name">Basketball</div>
+        <div class="sport-status">Coming soon</div>
+      </div>
+    </a>
+    <a class="sport-tile disabled" href="#" style="--tile-a:#14532d; --tile-b:#1d4ed8;">
+      <div class="tile-content">
+        <div class="sport-name">Soccer</div>
+        <div class="sport-status">Coming soon</div>
+      </div>
+    </a>
+    <a class="sport-tile disabled" href="#" style="--tile-a:#0a0a0a; --tile-b:#c9a227;">
+      <div class="tile-content">
+        <div class="sport-name">UFC</div>
+        <div class="sport-status">Coming soon</div>
+      </div>
+    </a>
+    <a class="sport-tile disabled" href="#" style="--tile-a:#BF5700; --tile-b:#4a2a00;">
+      <div class="tile-content">
+        <div class="sport-name">College Football</div>
+        <div class="sport-status">Coming soon</div>
+      </div>
+    </a>
+  </div>
+
+  <p class="disclaimer">Each model pulls live team/player data from public, unauthenticated sports APIs and compares it against Kalshi prices you enter by hand. Decision-support heuristics, not a guaranteed edge &mdash; always double check prices before trading.</p>
+</div>
+
+</body>
+</html>
