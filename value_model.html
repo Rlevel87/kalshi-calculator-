@@ -695,6 +695,26 @@
       </table>
     </div>
 
+    <div class="adv-sub" style="margin-top:22px;">Recommendation performance (settled matchups only)</div>
+    <div class="metrics" style="margin-top:0;">
+      <div class="metric">
+        <div class="m-label">Recommendation win rate</div>
+        <div class="m-val" id="recWinRateVal">&mdash;</div>
+        <div class="m-sub" id="recWinRateSub">&mdash;</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Avg edge &mdash; wins</div>
+        <div class="m-val" id="avgEdgeWinVal">&mdash;</div>
+        <div class="m-sub" id="avgEdgeWinSub">&mdash;</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Avg edge &mdash; losses</div>
+        <div class="m-val" id="avgEdgeLossVal">&mdash;</div>
+        <div class="m-sub" id="avgEdgeLossSub">&mdash;</div>
+      </div>
+    </div>
+    <div class="sample-note">"Recommendation" = whichever side had the better edge (model &minus; market) when you recorded the matchup. Win rate is how often that side actually won. "Avg edge" splits the edge size itself (in points, at record time) by outcome &mdash; if winning recommendations show a noticeably bigger average edge than losing ones, that's a sign the edge size itself is meaningful, not just noise.</div>
+
     <div class="adv-sub" style="margin-top:22px;">Stat accuracy (settled matchups only)</div>
     <div style="overflow-x:auto;">
       <table class="log-table">
@@ -1537,6 +1557,7 @@ function recordMatchup() {
     date: new Date().toISOString().slice(0, 10),
     nameA: lastCalc.nameA, nameB: lastCalc.nameB,
     homeTeam: lastCalc.homeTeam,
+    recSide: lastCalc.side, edgePts: lastCalc.edge * 100, // the recommended side and its edge, in points, at record time
     modelA: lastCalc.modelA, modelB: lastCalc.modelB,
     marketA: lastCalc.marketA, marketB: lastCalc.marketB,
     opsA: lastCalc.opsA, opsB: lastCalc.opsB,
@@ -1611,6 +1632,38 @@ function sparklineSVG(series) {
     '<line x1="' + pad + '" y1="' + baseline + '" x2="' + (w - pad) + '" y2="' + baseline + '" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="2,2"/>' +
     '<polyline points="' + points + '" fill="none" stroke="var(--accent)" stroke-width="1.6"/>' +
     '</svg>';
+}
+
+function fmtEdgePts(x) { return (x >= 0 ? '+' : '') + x.toFixed(1) + ' pts'; }
+
+// Splits settled matchups into "recommendation won" (the side recorded as recSide actually won)
+// vs "recommendation lost", then averages the edge (in points) that was showing at record time
+// within each group -- e.g. if winning recommendations average a noticeably bigger edge than
+// losing ones, that's a sign the edge size itself is a meaningful signal, not just noise.
+function computeRecommendationPerf(entries) {
+  const settled = entries.filter(function (e) {
+    return (e.result === 'A' || e.result === 'B') && e.recSide && e.edgePts !== undefined && e.edgePts !== null && !isNaN(e.edgePts);
+  });
+  const wins = [], losses = [];
+  settled.forEach(function (e) {
+    (e.recSide === e.result ? wins : losses).push(e.edgePts);
+  });
+  const avg = function (arr) { return arr.length ? arr.reduce(function (a, b) { return a + b; }, 0) / arr.length : null; };
+  return {
+    total: settled.length, winCount: wins.length, lossCount: losses.length,
+    winRate: settled.length ? (wins.length / settled.length) * 100 : null,
+    avgEdgeWin: avg(wins), avgEdgeLoss: avg(losses)
+  };
+}
+
+function renderRecommendationPerf() {
+  const perf = computeRecommendationPerf(loadMatchupData());
+  document.getElementById('recWinRateVal').textContent = perf.winRate !== null ? perf.winRate.toFixed(1) + '%' : '—';
+  document.getElementById('recWinRateSub').textContent = perf.total + ' settled recommendation' + (perf.total === 1 ? '' : 's');
+  document.getElementById('avgEdgeWinVal').textContent = perf.avgEdgeWin !== null ? fmtEdgePts(perf.avgEdgeWin) : '—';
+  document.getElementById('avgEdgeWinSub').textContent = perf.winCount + ' win' + (perf.winCount === 1 ? '' : 's');
+  document.getElementById('avgEdgeLossVal').textContent = perf.avgEdgeLoss !== null ? fmtEdgePts(perf.avgEdgeLoss) : '—';
+  document.getElementById('avgEdgeLossSub').textContent = perf.lossCount + ' loss' + (perf.lossCount === 1 ? '' : 'es');
 }
 
 // For each tracked stat, walks settled matchups oldest-to-newest and checks whether the team
@@ -1692,6 +1745,7 @@ function renderMatchupData() {
   summary.textContent = entries.length === 0 ? 'No matchups recorded yet.' :
     entries.length + ' recorded · ' + settledCount + ' settled · stored locally in this browser only';
 
+  renderRecommendationPerf();
   renderStatAccuracy();
 }
 
