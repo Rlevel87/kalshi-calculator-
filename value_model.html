@@ -68,6 +68,28 @@
   }
   @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
 
+  /* Quick Actions sits beside Team B on wide screens, drops full-width on medium
+     screens, and stacks in document order (right after Team B) on mobile. */
+  .grid.grid-3 { grid-template-columns: 1fr 1fr minmax(240px, 300px); }
+  @media (max-width: 900px) {
+    .grid.grid-3 { grid-template-columns: 1fr 1fr; }
+    .grid.grid-3 .quick-actions { grid-column: 1 / -1; }
+  }
+  @media (max-width: 780px) { .grid.grid-3 { grid-template-columns: 1fr; } }
+
+  .quick-actions .btn { width: 100%; text-align: center; }
+  .rec-mini {
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--panel-alt);
+    color: var(--ink-muted);
+    margin-bottom: 14px;
+  }
+  .rec-mini.pos { border-color: var(--pos); background: var(--pos-bg); color: var(--pos); }
+  .rec-mini.neg { border-color: var(--neg); background: var(--neg-bg); color: var(--neg); }
+
   .card {
     background: var(--panel);
     border: 1px solid var(--rule);
@@ -454,7 +476,7 @@
   </div>
 
   <!-- Team stat inputs -->
-  <div class="grid" style="margin-top:18px;">
+  <div class="grid grid-3" style="margin-top:18px;">
     <div class="card team-a">
       <h2><span id="cardATitle">Team A &mdash; Recent Form</span><button type="button" class="btn" id="fetchBtnA" onclick="fetchTeamData('A')">Fetch live data</button></h2>
       <div class="fetch-status" id="fetchStatusA"></div>
@@ -523,6 +545,17 @@
           <input type="number" id="awayWinPctB" step="0.001" value="0.440">
         </div>
       </div>
+    </div>
+
+    <div class="card quick-actions">
+      <h2>Quick Actions</h2>
+      <div class="rec-mini" id="quickRecSummary">Enter both teams&rsquo; data to see the model&rsquo;s recommendation here.</div>
+      <div class="field">
+        <label for="betAmount">Bet amount ($)</label>
+        <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
+      </div>
+      <button type="button" class="btn" id="logTradeBtn" onclick="logCurrentTrade()">Log this trade</button>
+      <button type="button" class="btn" onclick="recordMatchup()" style="margin-top:10px;">Record this matchup</button>
     </div>
   </div>
 
@@ -657,11 +690,6 @@
   <div class="card" style="margin-top:22px;">
     <h2>Trade Log</h2>
     <div class="log-controls">
-      <div class="field">
-        <label for="betAmount">Bet amount ($)</label>
-        <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
-      </div>
-      <button type="button" class="btn" id="logTradeBtn" onclick="logCurrentTrade()">Log this trade</button>
       <button type="button" class="btn" onclick="exportLog()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
@@ -680,7 +708,6 @@
   <div class="card" style="margin-top:22px;" id="dataCard">
     <h2>Matchup Data &amp; Analysis</h2>
     <div class="log-controls">
-      <button type="button" class="btn" onclick="recordMatchup()">Record this matchup</button>
       <button type="button" class="btn" onclick="exportMatchupData()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importMatchupFile').click()">Import .json</button>
       <input type="file" id="importMatchupFile" accept="application/json" class="hidden" onchange="importMatchupData(event)">
@@ -896,6 +923,14 @@ function recalc() {
     recEdgeVal.textContent = fmtPts(edge);
     kellyVal.textContent = '$0.00';
     kellySub.textContent = 'edge too small to act on';
+  }
+
+  // Mirror the recommendation into the Quick Actions box next to Team B, so logging a
+  // trade or recording a matchup doesn't require scrolling down to the Results section.
+  const quickRec = document.getElementById('quickRecSummary');
+  if (quickRec) {
+    quickRec.className = 'rec-mini ' + banner.className.replace('rec-banner', '').trim();
+    quickRec.textContent = recMain.textContent + ' (edge ' + recEdgeVal.textContent + ')';
   }
 
   // Snapshot for the trade log — "Log this trade" reads this instead of recomputing.
