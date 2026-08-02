@@ -127,6 +127,40 @@
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+  .danger-zone { border-color: var(--neg); }
+  .btn-danger { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+  .btn-danger:hover { border-color: var(--neg); background: var(--neg); color: #180a08; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 1000;
+  }
+  .modal-box {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 22px 24px; max-width: 420px; width: 100%;
+  }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--neg); }
+  .modal-box p { margin: 0 0 20px; color: var(--ink-muted); font-size: 13.5px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+
+  .hold-delete-btn {
+    position: relative;
+    overflow: hidden;
+    color: var(--neg);
+    border-color: var(--neg);
+    background: var(--neg-bg);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .hold-delete-btn .hold-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: var(--neg);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .hold-delete-btn .hold-label { position: relative; }
+
   .fetch-status {
     font-size: 12px;
     color: var(--ink-faint);
@@ -602,11 +636,11 @@
 
     <div class="adv-sub">Component weights (auto-normalized to sum to 1)</div>
     <div class="adv-grid">
-      <div class="field"><label for="wSpEra">Starting pitcher ERA (L4)</label><input type="number" id="wSpEra" step="0.01" value="0.25"></div>
-      <div class="field"><label for="wSeasonSpEra">Starting pitcher ERA (season)</label><input type="number" id="wSeasonSpEra" step="0.01" value="0.10"></div>
+      <div class="field"><label for="wSpEra">Starting pitcher ERA (L4)</label><input type="number" id="wSpEra" step="0.01" value="0.15"></div>
+      <div class="field"><label for="wSeasonSpEra">Starting pitcher ERA (season)</label><input type="number" id="wSeasonSpEra" step="0.01" value="0.15"></div>
       <div class="field"><label for="wBullpenEra">Bullpen season ERA (active roster)</label><input type="number" id="wBullpenEra" step="0.01" value="0.15"></div>
-      <div class="field"><label for="wOps">Team L7 OPS</label><input type="number" id="wOps" step="0.01" value="0.20"></div>
-      <div class="field"><label for="wWin">L10 win%</label><input type="number" id="wWin" step="0.01" value="0.15"></div>
+      <div class="field"><label for="wOps">Team L7 OPS</label><input type="number" id="wOps" step="0.01" value="0.13"></div>
+      <div class="field"><label for="wWin">L10 win%</label><input type="number" id="wWin" step="0.01" value="0.27"></div>
       <div class="field"><label for="wHomeAway">Home/away win%</label><input type="number" id="wHomeAway" step="0.01" value="0.15"></div>
     </div>
 
@@ -622,14 +656,14 @@
       <div class="field"><label for="seasonSpEraSd">SP ERA (season) st. dev.</label><input type="number" id="seasonSpEraSd" step="0.01" value="0.90"></div>
       <div class="field"><label for="winSd">L10 win% st. dev.</label><input type="number" id="winSd" step="0.01" value="0.16"></div>
       <div class="field"><label for="homeAwaySd">Home/away win% st. dev.</label><input type="number" id="homeAwaySd" step="0.001" value="0.085"></div>
-      <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="3.2"></div>
+      <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="5.0"></div>
     </div>
 
     <div class="adv-sub">Staking</div>
     <div class="adv-grid">
-      <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.25"></div>
+      <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.15"></div>
       <div class="field"><label for="bankroll">Bankroll ($)</label><input type="number" id="bankroll" step="10" value="1000"></div>
-      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="3"></div>
+      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
     </div>
   </details>
 
@@ -753,6 +787,26 @@
       </table>
     </div>
     <div class="sample-note">"Accuracy" = how often the team with the better pre-game number for that stat (lower ERA, higher everything else) actually won &mdash; a coin flip is 50%. Ties and matchups with no result yet are excluded. The rolling trend plots that accuracy after each additional settled result, oldest to newest, so you can see whether a stat is actually stabilizing or just had a lucky run. Needs a decent sample (10-20+ settled matchups) before any of this means much.</div>
+  </div>
+
+  <div class="card danger-zone" style="margin-top:22px;">
+    <h2 style="color:var(--neg);">Danger Zone</h2>
+    <div class="fetch-status" style="margin-bottom:10px;">Permanently deletes your entire trade log and matchup data from this browser's storage. This cannot be undone &mdash; export both above first if you might want them later.</div>
+    <button type="button" class="btn btn-danger" onclick="openClearDataModal()">Clear All Data&hellip;</button>
+  </div>
+
+  <div class="modal-overlay hidden" id="clearDataModal">
+    <div class="modal-box">
+      <h3>Delete all trade log and matchup data?</h3>
+      <p>This permanently erases every logged trade and recorded matchup from this browser. There is no undo. Export both first if you might want this data later.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeClearDataModal()">No, cancel</button>
+        <button type="button" class="btn hold-delete-btn" id="holdDeleteBtn">
+          <span class="hold-fill" id="holdFill"></span>
+          <span class="hold-label">Hold to delete</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <details class="howitworks">
@@ -1605,6 +1659,15 @@ function recordMatchup() {
     return;
   }
   const entries = loadMatchupData();
+  const today = new Date().toISOString().slice(0, 10);
+  const alreadyRecorded = entries.some(function (e) {
+    return e.date === today &&
+      ((e.nameA === lastCalc.nameA && e.nameB === lastCalc.nameB) ||
+       (e.nameA === lastCalc.nameB && e.nameB === lastCalc.nameA));
+  });
+  if (alreadyRecorded && !confirm(lastCalc.nameA + ' vs ' + lastCalc.nameB + ' was already recorded today. Record it again anyway (e.g. a doubleheader)?')) {
+    return;
+  }
   entries.push({
     id: Date.now(),
     date: new Date().toISOString().slice(0, 10),
@@ -1809,6 +1872,67 @@ renderMatchupData();
 getTeams().catch(function () {});
 document.getElementById('teamAName').addEventListener('blur', function () { resolveAndBadge('A'); });
 document.getElementById('teamBName').addEventListener('blur', function () { resolveAndBadge('B'); });
+
+/* =======================================================================
+   Clear All Data -- wipes the trade log and matchup data from localStorage.
+   Requires holding the delete button down for HOLD_MS instead of a single
+   click/confirm, so an accidental click (or muscle-memory "yes" on a normal
+   confirm dialog) can't nuke this browser's entire history by mistake.
+   ======================================================================= */
+
+const HOLD_MS = 1400;
+let holdRAF = null;
+let holdStartTime = null;
+
+function openClearDataModal() {
+  document.getElementById('clearDataModal').classList.remove('hidden');
+}
+function closeClearDataModal() {
+  document.getElementById('clearDataModal').classList.add('hidden');
+  cancelHold();
+}
+
+function cancelHold() {
+  if (holdRAF !== null) { cancelAnimationFrame(holdRAF); holdRAF = null; }
+  holdStartTime = null;
+  const fill = document.getElementById('holdFill');
+  if (fill) fill.style.width = '0%';
+}
+
+function startHold() {
+  const fill = document.getElementById('holdFill');
+  holdStartTime = performance.now();
+  function tick(now) {
+    const elapsed = now - holdStartTime;
+    const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
+    fill.style.width = pct + '%';
+    if (pct >= 100) {
+      holdRAF = null;
+      clearAllData();
+      return;
+    }
+    holdRAF = requestAnimationFrame(tick);
+  }
+  holdRAF = requestAnimationFrame(tick);
+}
+
+function clearAllData() {
+  localStorage.removeItem(LOG_KEY);
+  localStorage.removeItem(MATCHUP_DATA_KEY);
+  renderLog();
+  renderMatchupData();
+  closeClearDataModal();
+}
+
+(function () {
+  const btn = document.getElementById('holdDeleteBtn');
+  btn.addEventListener('pointerdown', function (e) { e.preventDefault(); startHold(); });
+  btn.addEventListener('pointerup', cancelHold);
+  btn.addEventListener('pointerleave', cancelHold);
+  btn.addEventListener('pointercancel', cancelHold);
+  // Losing focus/visibility mid-hold (e.g. alt-tab) shouldn't leave a stuck timer running.
+  window.addEventListener('blur', cancelHold);
+})();
 </script>
 
 </body>
