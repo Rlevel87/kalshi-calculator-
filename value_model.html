@@ -742,11 +742,13 @@
   <div class="card" style="margin-top:22px;" id="dataCard">
     <h2>Matchup Data &amp; Analysis</h2>
     <div class="log-controls">
+      <button type="button" class="btn" onclick="refreshMatchupResults()" id="refreshMatchupBtn">Fetch results for pending games</button>
       <button type="button" class="btn" onclick="exportMatchupData()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importMatchupFile').click()">Import .json</button>
       <input type="file" id="importMatchupFile" accept="application/json" class="hidden" onchange="importMatchupData(event)">
     </div>
-    <div class="fetch-status" style="margin-bottom:10px;">Snapshots every stat currently on screen for both teams, so you can check later which ones actually tracked the winner. Set the Result once the game's final.</div>
+    <div class="fetch-status" style="margin-bottom:10px;">Snapshots every stat currently on screen for both teams, so you can check later which ones actually tracked the winner. Set the Result manually, or click "Fetch results for pending games" to pull final scores from MLB automatically.</div>
+    <div class="fetch-status" id="refreshMatchupStatus" style="margin-bottom:10px;"></div>
     <div class="log-summary" id="matchupDataSummary">No matchups recorded yet.</div>
     <div class="log-scroll" style="margin-top:12px; max-height:760px;">
       <table class="log-table">
@@ -1728,6 +1730,66 @@ function setMatchupResult(id, result) {
   if (e) e.result = result;
   saveMatchupData(entries);
   renderMatchupData();
+}
+
+// Looks up the head-to-head game between two teams on a specific date and returns the
+// winning team's MLB id once it's final, or null if that game hasn't finished yet (or a
+// matching game couldn't be found for that date at all -- e.g. it was postponed).
+async function fetchMatchupResult(teamAId, teamBId, date) {
+  const sched = await mlbGet(MLB_API + '/schedule?sportId=1&teamId=' + teamAId + '&startDate=' + date + '&endDate=' + date);
+  for (const d of (sched.dates || [])) {
+    for (const g of d.games) {
+      const homeId = g.teams.home.team.id, awayId = g.teams.away.team.id;
+      const isMatch = (homeId === teamAId && awayId === teamBId) || (homeId === teamBId && awayId === teamAId);
+      if (!isMatch || g.status.abstractGameState !== 'Final') continue;
+      const homeScore = g.teams.home.score, awayScore = g.teams.away.score;
+      if (homeScore === undefined || awayScore === undefined || homeScore === awayScore) continue;
+      return homeScore > awayScore ? homeId : awayId;
+    }
+  }
+  return null;
+}
+
+// Walks every still-pending recorded matchup, resolves each side's MLB team, and fills in
+// the result once that day's game is final -- so you don't have to hand-set the winner on
+// every row after the fact.
+async function refreshMatchupResults() {
+  const btn = document.getElementById('refreshMatchupBtn');
+  const status = document.getElementById('refreshMatchupStatus');
+  const entries = loadMatchupData();
+  const pending = entries.filter(function (e) { return e.result === 'pending'; });
+  if (!pending.length) {
+    status.textContent = 'No pending matchups to check.';
+    return;
+  }
+
+  btn.disabled = true;
+  let updated = 0, stillPending = 0, unresolved = 0;
+  try {
+    const teams = await getTeams();
+    for (let i = 0; i < pending.length; i++) {
+      const e = pending[i];
+      status.textContent = 'Checking ' + (i + 1) + ' of ' + pending.length + ' pending matchup(s) — ' + e.nameA + ' vs ' + e.nameB + '…';
+      const teamA = findTeam(e.nameA, teams);
+      const teamB = findTeam(e.nameB, teams);
+      if (!teamA || !teamB) { unresolved++; continue; }
+      try {
+        const winnerId = await fetchMatchupResult(teamA.id, teamB.id, e.date);
+        if (winnerId === null) { stillPending++; continue; }
+        e.result = (winnerId === teamA.id) ? 'A' : 'B';
+        updated++;
+      } catch (err) { stillPending++; }
+    }
+    saveMatchupData(entries);
+    renderMatchupData();
+    status.textContent = '✓ Checked ' + pending.length + ' pending matchup(s) — ' + updated + ' updated' +
+      (stillPending ? ', ' + stillPending + ' still not final' : '') +
+      (unresolved ? ', ' + unresolved + ' team name(s) not matched' : '') + '.';
+  } catch (err) {
+    status.textContent = 'Fetch failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function deleteMatchup(id) {
