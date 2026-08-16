@@ -519,6 +519,20 @@
         <input type="number" id="seasonSpEraA" step="0.01" value="3.60">
       </div>
       <div class="field">
+        <label for="spWhipA">Starting pitcher &mdash; season WHIP</label>
+        <input type="number" id="spWhipA" step="0.001" value="1.265">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="spHr9A">SP HR/9 (season)</label>
+          <input type="number" id="spHr9A" step="0.01" value="1.20">
+        </div>
+        <div class="field">
+          <label for="spBb9A">SP BB/9 (season)</label>
+          <input type="number" id="spBb9A" step="0.01" value="3.00">
+        </div>
+      </div>
+      <div class="field">
         <label for="runDiffPerGmA">Run differential /gm (season)</label>
         <input type="number" id="runDiffPerGmA" step="0.01" value="0">
       </div>
@@ -558,6 +572,16 @@
         <label for="slgA">Team SLG (season, active roster)</label>
         <input type="number" id="slgA" step="0.001" value="0.400">
       </div>
+      <div class="row2">
+        <div class="field">
+          <label for="hrRateA">Team HR rate (season, active roster)</label>
+          <input type="number" id="hrRateA" step="0.001" value="0.033">
+        </div>
+        <div class="field">
+          <label for="bbRateA">Team BB rate (season, active roster)</label>
+          <input type="number" id="bbRateA" step="0.001" value="0.086">
+        </div>
+      </div>
       <div class="field">
         <label for="spEraA">Starting pitcher &mdash; ERA over last 4 starts</label>
         <input type="number" id="spEraA" step="0.01" value="3.20">
@@ -580,6 +604,20 @@
       <div class="field">
         <label for="seasonSpEraB">Starting pitcher &mdash; season ERA</label>
         <input type="number" id="seasonSpEraB" step="0.01" value="4.00">
+      </div>
+      <div class="field">
+        <label for="spWhipB">Starting pitcher &mdash; season WHIP</label>
+        <input type="number" id="spWhipB" step="0.001" value="1.265">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="spHr9B">SP HR/9 (season)</label>
+          <input type="number" id="spHr9B" step="0.01" value="1.20">
+        </div>
+        <div class="field">
+          <label for="spBb9B">SP BB/9 (season)</label>
+          <input type="number" id="spBb9B" step="0.01" value="3.00">
+        </div>
       </div>
       <div class="field">
         <label for="runDiffPerGmB">Run differential /gm (season)</label>
@@ -620,6 +658,16 @@
       <div class="field">
         <label for="slgB">Team SLG (season, active roster)</label>
         <input type="number" id="slgB" step="0.001" value="0.400">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="hrRateB">Team HR rate (season, active roster)</label>
+          <input type="number" id="hrRateB" step="0.001" value="0.033">
+        </div>
+        <div class="field">
+          <label for="bbRateB">Team BB rate (season, active roster)</label>
+          <input type="number" id="bbRateB" step="0.001" value="0.086">
+        </div>
       </div>
       <div class="field">
         <label for="spEraB">Starting pitcher &mdash; ERA over last 4 starts</label>
@@ -693,8 +741,12 @@
     <div class="adv-sub">Component weights (auto-normalized to sum to 1) &mdash; set from each stat's real correlation with winning, measured across the 2025 season (2,117 games) via a separate backtest pipeline. Starter season ERA had the strongest correlation (as the opposing-starter-relative signal), SP ERA (L4) is kept in at a deliberately low weight since it's not part of that study, and home/away win% is a pre-existing feature the study didn't cover.</div>
     <div class="adv-grid">
       <div class="field"><label for="wSeasonSpEra">Starting pitcher ERA (season) &mdash; r=0.148</label><input type="number" id="wSeasonSpEra" step="0.001" value="0.148"></div>
+      <div class="field"><label for="wSpWhip">Starting pitcher WHIP (season) &mdash; r=0.106</label><input type="number" id="wSpWhip" step="0.001" value="0.106"></div>
+      <div class="field"><label for="wSpWhipVsOppAvgDiff">SP WHIP vs opp AVG (active roster) &mdash; r=0.103</label><input type="number" id="wSpWhipVsOppAvgDiff" step="0.001" value="0.103"></div>
       <div class="field"><label for="wRunDiffPerGm">Run differential /gm &mdash; r=0.069</label><input type="number" id="wRunDiffPerGm" step="0.001" value="0.069"></div>
       <div class="field"><label for="wRunsAllowedPerGm">Runs allowed /gm &mdash; r=0.066</label><input type="number" id="wRunsAllowedPerGm" step="0.001" value="0.066"></div>
+      <div class="field"><label for="wSpBb9VsOppBbRateDiff">SP BB/9 vs opp BB rate (active roster) &mdash; r=0.065</label><input type="number" id="wSpBb9VsOppBbRateDiff" step="0.001" value="0.065"></div>
+      <div class="field"><label for="wSpHr9VsOppHrRateDiff">SP HR/9 vs opp HR rate (active roster) &mdash; r=0.063</label><input type="number" id="wSpHr9VsOppHrRateDiff" step="0.001" value="0.063"></div>
       <div class="field"><label for="wOpsL7">Team OPS, last 7 (active roster) &mdash; r=0.056</label><input type="number" id="wOpsL7" step="0.001" value="0.056"></div>
       <div class="field"><label for="wWin">L10 win% &mdash; r=0.054</label><input type="number" id="wWin" step="0.001" value="0.054"></div>
       <div class="field"><label for="wObp">Team OBP, season (active roster) &mdash; r=0.048</label><input type="number" id="wObp" step="0.001" value="0.048"></div>
@@ -730,6 +782,14 @@
       <div class="field"><label for="spEraSd">SP ERA (L4) st. dev.</label><input type="number" id="spEraSd" step="0.01" value="1.50"></div>
       <div class="field"><label for="seasonSpEraMean">SP ERA (season) mean</label><input type="number" id="seasonSpEraMean" step="0.01" value="4.00"></div>
       <div class="field"><label for="seasonSpEraSd">SP ERA (season) st. dev.</label><input type="number" id="seasonSpEraSd" step="0.01" value="0.90"></div>
+      <div class="field"><label for="spWhipMean">SP WHIP (season) mean</label><input type="number" id="spWhipMean" step="0.001" value="1.265"></div>
+      <div class="field"><label for="spWhipSd">SP WHIP (season) st. dev.</label><input type="number" id="spWhipSd" step="0.001" value="0.221"></div>
+      <div class="field"><label for="spWhipVsOppAvgDiffMean">SP WHIP vs opp AVG diff mean</label><input type="number" id="spWhipVsOppAvgDiffMean" step="0.001" value="1.017"></div>
+      <div class="field"><label for="spWhipVsOppAvgDiffSd">SP WHIP vs opp AVG diff st. dev.</label><input type="number" id="spWhipVsOppAvgDiffSd" step="0.001" value="0.222"></div>
+      <div class="field"><label for="spBb9VsOppBbRateDiffMean">SP BB/9 vs opp BB rate diff mean</label><input type="number" id="spBb9VsOppBbRateDiffMean" step="0.01" value="2.90"></div>
+      <div class="field"><label for="spBb9VsOppBbRateDiffSd">SP BB/9 vs opp BB rate diff st. dev.</label><input type="number" id="spBb9VsOppBbRateDiffSd" step="0.01" value="1.00"></div>
+      <div class="field"><label for="spHr9VsOppHrRateDiffMean">SP HR/9 vs opp HR rate diff mean</label><input type="number" id="spHr9VsOppHrRateDiffMean" step="0.01" value="1.17"></div>
+      <div class="field"><label for="spHr9VsOppHrRateDiffSd">SP HR/9 vs opp HR rate diff st. dev.</label><input type="number" id="spHr9VsOppHrRateDiffSd" step="0.01" value="0.50"></div>
       <div class="field"><label for="winSd">L10 win% st. dev.</label><input type="number" id="winSd" step="0.01" value="0.16"></div>
       <div class="field"><label for="homeAwaySd">Home/away win% st. dev.</label><input type="number" id="homeAwaySd" step="0.001" value="0.085"></div>
       <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="5.0"></div>
@@ -890,7 +950,7 @@
   <details class="howitworks">
     <summary>How this model works</summary>
     <div class="steps">
-      <p><strong>1. Composite rating.</strong> Each of the 13 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>) and combined with your weights into a single Team Strength Index (TSI). ERA and runs-allowed z-scores are inverted since lower is better there. Default weights aren't arbitrary &mdash; 11 of the 13 are each stat's actual correlation with winning, measured by backtesting the 2025 season game-by-game (2,117 games) in a separate pipeline: starting pitcher season ERA came out strongest (r&nbsp;=&nbsp;0.148), run differential and runs allowed per game next, then last-7-games team OPS, L10 win%, team OBP, bullpen ERA, season team OPS, runs scored per game, team AVG, and team SLG (r&nbsp;=&nbsp;0.033 at the bottom). SP ERA (last 4 starts) is kept at a deliberately low, non-correlation-derived weight, and home/away win% keeps a moderate weight of its own &mdash; neither was part of that backtest. Every stat except runs scored/allowed/differential is built by summing only players on that team's <em>current active roster</em> &mdash; anyone hurt, optioned, DFA'd, or traded away is excluded, the same principle bullpen ERA already used, now applied to team batting and to the starter/bullpen split too. Bullpen ERA sums earned runs and innings pitched across every reliever (zero starts this season) on today's active roster; team batting (AVG/OBP/SLG/OPS, season and last-7) sums the same way across today's active position players. Only the home/away split matching where each team is actually playing feeds in; the other stays visible but unused.</p>
+      <p><strong>1. Composite rating.</strong> Each of the 17 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>) and combined with your weights into a single Team Strength Index (TSI). ERA/WHIP/runs-allowed z-scores are inverted since lower is better there. Default weights aren't arbitrary &mdash; 15 of the 17 are each stat's actual correlation with winning, measured by backtesting the 2025 season game-by-game (2,117 games) in a separate pipeline: starting pitcher season ERA came out strongest (r&nbsp;=&nbsp;0.148), then SP season WHIP (r&nbsp;=&nbsp;0.106), then SP WHIP vs. the opposing lineup's active-roster batting AVG (r&nbsp;=&nbsp;0.103), run differential and runs allowed per game, SP BB/9 and HR/9 vs. the opposing lineup's active-roster walk/HR rate, last-7-games team OPS, L10 win%, team OBP, bullpen ERA, season team OPS, runs scored per game, team AVG, and team SLG (r&nbsp;=&nbsp;0.033 at the bottom). SP ERA (last 4 starts) is kept at a deliberately low, non-correlation-derived weight, and home/away win% keeps a moderate weight of its own &mdash; neither was part of that backtest. The three &ldquo;vs. opposing lineup&rdquo; stats are genuinely cross-team: team A's TSI reads team A's own SP rate stat AND team B's own batting rate stat, mixing different units (WHIP/HR9/BB9 are per-9-innings, AVG/HR-rate/BB-rate are per-at-bat) on purpose &mdash; there's no textbook formula being approximated, it's an empirically-found matchup signal, calibrated (mean/SD) directly off the real distribution of that diff in the 2025 backtest. Every stat except runs scored/allowed/differential and the starter's own numbers is built by summing only players on that team's <em>current active roster</em> &mdash; anyone hurt, optioned, DFA'd, or traded away is excluded, the same principle bullpen ERA already used, now applied to team batting too. Bullpen ERA sums earned runs and innings pitched across every reliever (zero starts this season) on today's active roster; team batting (AVG/OBP/SLG/OPS/HR-rate/BB-rate, season and last-7) sums the same way across today's active position players. Only the home/away split matching where each team is actually playing feeds in; the other stays visible but unused.</p>
       <p><strong>2. Implied win%.</strong> Each team's TSI is passed through a logistic curve, dampened by the &ldquo;confidence dampening&rdquo; constant, so a strong composite edge still tops out around 65&ndash;70% &mdash; consistent with how much single-game variance real baseball has.</p>
       <p><strong>3. Head-to-head via log5.</strong> The two teams' implied win%s (p<sub>A</sub>, p<sub>B</sub>) are combined with Bill James' log5 formula: <code>P(A) = (p<sub>A</sub> &minus; p<sub>A</sub>p<sub>B</sub>) / (p<sub>A</sub> + p<sub>B</sub> &minus; 2p<sub>A</sub>p<sub>B</sub>)</code>. This is the model's final win probability.</p>
       <p><strong>4. De-vig the market.</strong> If you enter both Kalshi prices, they're normalized to sum to 100% (<code>priceA / (priceA + priceB)</code>) so the comparison isn't partly just the exchange's spread.</p>
@@ -950,7 +1010,22 @@ function compositeTSI(stats, weights, base) {
   const spEraZ = -z(stats.spEra, base.spEraMean, base.spEraSd);
   const seasonSpEraZ = -z(stats.seasonSpEra, base.seasonSpEraMean, base.seasonSpEraSd);
   const homeAwayZ = z(stats.homeAwayWinPct, 0.5, base.homeAwaySd);
-  return weights.seasonSpEra * seasonSpEraZ + weights.runDiffPerGm * runDiffZ + weights.runsAllowedPerGm * runsAllowedZ +
+  const spWhipZ = -z(stats.spWhip, base.spWhipMean, base.spWhipSd);
+  // These three mix pitcher rate stats (WHIP/HR9/BB9, per 9 innings) against the OPPOSING
+  // team's batting rate stats (AVG/HR-rate/BB-rate, per at-bat) -- different units by design,
+  // an empirically-found matchup signal, not a textbook formula. All three correlated negatively
+  // with winning in the backtest (lower diff = better), so all three get a negative z-sign here,
+  // same as the other "lower is better" stats above.
+  const whipVsOppAvgDiff = stats.spWhip - stats.oppAvg;
+  const whipVsOppAvgDiffZ = -z(whipVsOppAvgDiff, base.spWhipVsOppAvgDiffMean, base.spWhipVsOppAvgDiffSd);
+  const bb9VsOppRateDiff = stats.spBb9 - stats.oppBbRate;
+  const bb9VsOppRateDiffZ = -z(bb9VsOppRateDiff, base.spBb9VsOppBbRateDiffMean, base.spBb9VsOppBbRateDiffSd);
+  const hr9VsOppRateDiff = stats.spHr9 - stats.oppHrRate;
+  const hr9VsOppRateDiffZ = -z(hr9VsOppRateDiff, base.spHr9VsOppHrRateDiffMean, base.spHr9VsOppHrRateDiffSd);
+  return weights.seasonSpEra * seasonSpEraZ + weights.spWhip * spWhipZ +
+    weights.spWhipVsOppAvgDiff * whipVsOppAvgDiffZ + weights.runDiffPerGm * runDiffZ +
+    weights.runsAllowedPerGm * runsAllowedZ + weights.spBb9VsOppBbRateDiff * bb9VsOppRateDiffZ +
+    weights.spHr9VsOppHrRateDiff * hr9VsOppRateDiffZ +
     weights.opsL7 * opsL7Z + weights.win * winZ + weights.obp * obpZ + weights.bullpenEra * bullpenEraZ +
     weights.ops * opsZ + weights.runsScoredPerGm * runsScoredZ + weights.avg * avgZ + weights.slg * slgZ +
     weights.homeAway * homeAwayZ + weights.spEra * spEraZ;
@@ -969,7 +1044,8 @@ function recalc() {
   // Weights, auto-normalized. Raw values are each stat's real correlation |r| with winning
   // (measured via a 2025-season backtest, 2,117 games) except wSpEra (deliberately kept lowest,
   // not part of that study) and wHomeAway (a pre-existing feature the study didn't cover).
-  const W_KEYS = ['seasonSpEra', 'runDiffPerGm', 'runsAllowedPerGm', 'opsL7', 'win', 'obp',
+  const W_KEYS = ['seasonSpEra', 'spWhip', 'spWhipVsOppAvgDiff', 'runDiffPerGm', 'runsAllowedPerGm',
+    'spBb9VsOppBbRateDiff', 'spHr9VsOppHrRateDiff', 'opsL7', 'win', 'obp',
     'bullpenEra', 'ops', 'runsScoredPerGm', 'avg', 'slg', 'homeAway', 'spEra'];
   let w = {};
   let wSum = 0;
@@ -988,6 +1064,10 @@ function recalc() {
     bullpenEraMean: val('bullpenEraMean'), bullpenEraSd: val('bullpenEraSd'),
     spEraMean: val('spEraMean'), spEraSd: val('spEraSd'),
     seasonSpEraMean: val('seasonSpEraMean'), seasonSpEraSd: val('seasonSpEraSd'),
+    spWhipMean: val('spWhipMean'), spWhipSd: val('spWhipSd'),
+    spWhipVsOppAvgDiffMean: val('spWhipVsOppAvgDiffMean'), spWhipVsOppAvgDiffSd: val('spWhipVsOppAvgDiffSd'),
+    spBb9VsOppBbRateDiffMean: val('spBb9VsOppBbRateDiffMean'), spBb9VsOppBbRateDiffSd: val('spBb9VsOppBbRateDiffSd'),
+    spHr9VsOppHrRateDiffMean: val('spHr9VsOppHrRateDiffMean'), spHr9VsOppHrRateDiffSd: val('spHr9VsOppHrRateDiffSd'),
     winSd: val('winSd'), homeAwaySd: val('homeAwaySd')
   };
   const scale = val('scale');
@@ -998,7 +1078,10 @@ function recalc() {
   const homeAwayA = homeTeam === 'A' ? val('homeWinPctA') : val('awayWinPctA');
   const homeAwayB = homeTeam === 'B' ? val('homeWinPctB') : val('awayWinPctB');
 
-  function readStats(side, homeAwayVal) {
+  // The three "SP vs opposing lineup" stats are genuinely cross-team -- team A's pitcher rate
+  // gets compared against team B's OWN batting rate, not team A's. So readStats needs to know
+  // the other side too, to pull its avg/hrRate/bbRate as the "opp" values feeding compositeTSI.
+  function readStats(side, otherSide, homeAwayVal) {
     return {
       ops: val('ops' + side), opsL7: val('opsL7' + side), obp: val('obp' + side),
       avg: val('avg' + side), slg: val('slg' + side),
@@ -1006,10 +1089,12 @@ function recalc() {
       runsAllowedPerGm: val('runsAllowedPerGm' + side),
       bullpenEra: val('bullpenEra' + side), winPct: val('l10' + side) / 10,
       spEra: val('spEra' + side), seasonSpEra: val('seasonSpEra' + side),
+      spWhip: val('spWhip' + side), spHr9: val('spHr9' + side), spBb9: val('spBb9' + side),
+      oppAvg: val('avg' + otherSide), oppHrRate: val('hrRate' + otherSide), oppBbRate: val('bbRate' + otherSide),
       homeAwayWinPct: homeAwayVal
     };
   }
-  const statsA = readStats('A', homeAwayA), statsB = readStats('B', homeAwayB);
+  const statsA = readStats('A', 'B', homeAwayA), statsB = readStats('B', 'A', homeAwayB);
   const tsiA = compositeTSI(statsA, w, base);
   const tsiB = compositeTSI(statsB, w, base);
 
@@ -1110,6 +1195,12 @@ function recalc() {
     bullpenEraA: statsA.bullpenEra, bullpenEraB: statsB.bullpenEra,
     spEraA: statsA.spEra, spEraB: statsB.spEra,
     seasonSpEraA: statsA.seasonSpEra, seasonSpEraB: statsB.seasonSpEra,
+    spWhipA: statsA.spWhip, spWhipB: statsB.spWhip,
+    spHr9A: statsA.spHr9, spHr9B: statsB.spHr9,
+    spBb9A: statsA.spBb9, spBb9B: statsB.spBb9,
+    spWhipVsOppAvgDiffA: statsA.spWhip - statsA.oppAvg, spWhipVsOppAvgDiffB: statsB.spWhip - statsB.oppAvg,
+    spBb9VsOppBbRateDiffA: statsA.spBb9 - statsA.oppBbRate, spBb9VsOppBbRateDiffB: statsB.spBb9 - statsB.oppBbRate,
+    spHr9VsOppHrRateDiffA: statsA.spHr9 - statsA.oppHrRate, spHr9VsOppHrRateDiffB: statsB.spHr9 - statsB.oppHrRate,
     l10A: statsA.winPct, l10B: statsB.winPct,
     homeAwayA: homeAwayA, homeAwayB: homeAwayB
   };
@@ -1277,11 +1368,12 @@ async function getTeamActiveBattingStats(teamId, season) {
   }));
 
   function sumCounts(splits) {
-    const c = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0 };
+    const c = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0, hr: 0 };
     splits.forEach(function (s) {
       const st = s.stat;
       c.ab += st.atBats || 0; c.h += st.hits || 0; c.bb += st.baseOnBalls || 0;
       c.hbp += st.hitByPitch || 0; c.sf += st.sacFlies || 0; c.tb += st.totalBases || 0;
+      c.hr += st.homeRuns || 0;
     });
     return c;
   }
@@ -1291,11 +1383,15 @@ async function getTeamActiveBattingStats(teamId, season) {
     const obp = obpDen > 0 ? (c.h + c.bb + c.hbp) / obpDen : null;
     const slg = c.ab > 0 ? c.tb / c.ab : null;
     const ops = (obp !== null && slg !== null) ? obp + slg : null;
-    return { avg: avg, obp: obp, slg: slg, ops: ops };
+    // HR rate = HR/AB. BB rate approximates walk rate as BB/(AB+BB) -- same PA
+    // approximation as OBP above, since box scores/game logs don't expose PA directly.
+    const hrRate = c.ab > 0 ? c.hr / c.ab : null;
+    const bbRate = (c.ab + c.bb) > 0 ? c.bb / (c.ab + c.bb) : null;
+    return { avg: avg, obp: obp, slg: slg, ops: ops, hrRate: hrRate, bbRate: bbRate };
   }
 
-  const seasonCounts = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0 };
-  const last7Counts = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0 };
+  const seasonCounts = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0, hr: 0 };
+  const last7Counts = { ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0, hr: 0 };
   logs.forEach(function (splits) {
     const c = sumCounts(splits);
     Object.keys(seasonCounts).forEach(function (k) { seasonCounts[k] += c[k]; });
@@ -1307,6 +1403,7 @@ async function getTeamActiveBattingStats(teamId, season) {
   const last7Rates = ratesFrom(last7Counts);
   return {
     avg: seasonRates.avg, obp: seasonRates.obp, slg: seasonRates.slg, ops: seasonRates.ops,
+    hrRate: seasonRates.hrRate, bbRate: seasonRates.bbRate,
     opsL7: last7Rates.ops, battersUsed: batters.length
   };
 }
@@ -1365,11 +1462,21 @@ async function getPitcherLast4ERA(pitcherId, season) {
 
 // Season ERA is a consistency check against the last-4-starts number above -- a starter running
 // hot or cold over 4 starts but with a very different full-season mark is one to weight carefully.
-// MLB's season endpoint already aggregates this, so no manual summing needed here.
-async function getPitcherSeasonERA(pitcherId, season) {
+// MLB's season endpoint already aggregates this, so no manual summing needed here. WHIP/HR9/BB9
+// come off the same season stat line, so this is still just one API call per starter.
+async function getPitcherSeasonStats(pitcherId, season) {
   const data = await mlbGet(MLB_API + '/people/' + pitcherId + '/stats?stats=season&group=pitching&season=' + season);
   const stat = data.stats && data.stats[0] && data.stats[0].splits[0] && data.stats[0].splits[0].stat;
-  return stat && stat.era ? parseFloat(stat.era) : null;
+  if (!stat) return { era: null, whip: null, hr9: null, bb9: null };
+  const era = stat.era ? parseFloat(stat.era) : null;
+  const outs = parseIPtoOuts(stat.inningsPitched);
+  const bb = stat.baseOnBalls || 0, h = stat.hits || 0, hr = stat.homeRuns || 0;
+  return {
+    era: era,
+    whip: outs > 0 ? (bb + h) * 3 / outs : null,
+    hr9: outs > 0 ? hr * 27 / outs : null,
+    bb9: outs > 0 ? bb * 27 / outs : null
+  };
 }
 
 async function fetchTeamData(side) {
@@ -1424,6 +1531,8 @@ async function fetchTeamData(side) {
     if (batting.slg !== null) document.getElementById('slg' + side).value = batting.slg.toFixed(3);
     if (batting.ops !== null) document.getElementById('ops' + side).value = batting.ops.toFixed(3);
     if (batting.opsL7 !== null) document.getElementById('opsL7' + side).value = batting.opsL7.toFixed(3);
+    if (batting.hrRate !== null) document.getElementById('hrRate' + side).value = batting.hrRate.toFixed(3);
+    if (batting.bbRate !== null) document.getElementById('bbRate' + side).value = batting.bbRate.toFixed(3);
 
     statusEl.textContent = 'Fetching active-roster bullpen…';
     const bullpen = await getTeamActiveBullpenSeasonERA(team.id, season);
@@ -1433,8 +1542,11 @@ async function fetchTeamData(side) {
     const pitcher = await getProbableStarter(team.id);
     if (pitcher) {
       const spStats = await getPitcherLast4ERA(pitcher.id, season);
-      const seasonEra = await getPitcherSeasonERA(pitcher.id, season);
-      if (seasonEra !== null) document.getElementById('seasonSpEra' + side).value = seasonEra.toFixed(2);
+      const seasonStats = await getPitcherSeasonStats(pitcher.id, season);
+      if (seasonStats.era !== null) document.getElementById('seasonSpEra' + side).value = seasonStats.era.toFixed(2);
+      if (seasonStats.whip !== null) document.getElementById('spWhip' + side).value = seasonStats.whip.toFixed(3);
+      if (seasonStats.hr9 !== null) document.getElementById('spHr9' + side).value = seasonStats.hr9.toFixed(2);
+      if (seasonStats.bb9 !== null) document.getElementById('spBb9' + side).value = seasonStats.bb9.toFixed(2);
       if (spStats.era !== null) {
         document.getElementById('spEra' + side).value = spStats.era.toFixed(2);
         statusEl.textContent = '✓ ' + team.name + ' — ' + batting.battersUsed + ' active batters · ' + bullpen.pitcherCount + ' active relievers · SP ' + pitcher.fullName + ' (' + spStats.starts + ' starts)';
@@ -1790,8 +1902,12 @@ const MATCHUP_DATA_KEY = 'kalshiValueModelMatchupData';
 // Keys must match the "<key>A" / "<key>B" fields saved by recordMatchup() below.
 const TRACKED_STATS = [
   { key: 'seasonSpEra', label: 'SP ERA (season)', higherBetter: false },
+  { key: 'spWhip', label: 'SP WHIP (season)', higherBetter: false },
+  { key: 'spWhipVsOppAvgDiff', label: 'SP WHIP vs opp AVG diff', higherBetter: false },
   { key: 'runDiffPerGm', label: 'Run differential /gm', higherBetter: true },
   { key: 'runsAllowedPerGm', label: 'Runs allowed /gm', higherBetter: false },
+  { key: 'spBb9VsOppBbRateDiff', label: 'SP BB/9 vs opp BB rate diff', higherBetter: false },
+  { key: 'spHr9VsOppHrRateDiff', label: 'SP HR/9 vs opp HR rate diff', higherBetter: false },
   { key: 'opsL7', label: 'Team OPS, L7 (active roster)', higherBetter: true },
   { key: 'l10', label: 'L10 win%', higherBetter: true },
   { key: 'obp', label: 'Team OBP, season (active roster)', higherBetter: true },
@@ -1846,6 +1962,10 @@ function recordMatchup() {
     bullpenEraA: lastCalc.bullpenEraA, bullpenEraB: lastCalc.bullpenEraB,
     spEraA: lastCalc.spEraA, spEraB: lastCalc.spEraB,
     seasonSpEraA: lastCalc.seasonSpEraA, seasonSpEraB: lastCalc.seasonSpEraB,
+    spWhipA: lastCalc.spWhipA, spWhipB: lastCalc.spWhipB,
+    spWhipVsOppAvgDiffA: lastCalc.spWhipVsOppAvgDiffA, spWhipVsOppAvgDiffB: lastCalc.spWhipVsOppAvgDiffB,
+    spBb9VsOppBbRateDiffA: lastCalc.spBb9VsOppBbRateDiffA, spBb9VsOppBbRateDiffB: lastCalc.spBb9VsOppBbRateDiffB,
+    spHr9VsOppHrRateDiffA: lastCalc.spHr9VsOppHrRateDiffA, spHr9VsOppHrRateDiffB: lastCalc.spHr9VsOppHrRateDiffB,
     l10A: lastCalc.l10A, l10B: lastCalc.l10B,
     homeAwayA: lastCalc.homeAwayA, homeAwayB: lastCalc.homeAwayB,
     result: 'pending' // set once the game's final: 'A' or 'B'
