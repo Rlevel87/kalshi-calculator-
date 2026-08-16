@@ -588,11 +588,11 @@
       </div>
       <div class="row2">
         <div class="field">
-          <label for="homeWinPctA">Home win% (season)</label>
+          <label for="homeWinPctA">Home win% (season) &mdash; reference only</label>
           <input type="number" id="homeWinPctA" step="0.001" value="0.540">
         </div>
         <div class="field">
-          <label for="awayWinPctA">Away win% (season)</label>
+          <label for="awayWinPctA">Away win% (season) &mdash; reference only</label>
           <input type="number" id="awayWinPctA" step="0.001" value="0.460">
         </div>
       </div>
@@ -675,11 +675,11 @@
       </div>
       <div class="row2">
         <div class="field">
-          <label for="homeWinPctB">Home win% (season)</label>
+          <label for="homeWinPctB">Home win% (season) &mdash; reference only</label>
           <input type="number" id="homeWinPctB" step="0.001" value="0.520">
         </div>
         <div class="field">
-          <label for="awayWinPctB">Away win% (season)</label>
+          <label for="awayWinPctB">Away win% (season) &mdash; reference only</label>
           <input type="number" id="awayWinPctB" step="0.001" value="0.440">
         </div>
       </div>
@@ -755,7 +755,7 @@
       <div class="field"><label for="wRunsScoredPerGm">Runs scored /gm &mdash; r=0.041</label><input type="number" id="wRunsScoredPerGm" step="0.001" value="0.041"></div>
       <div class="field"><label for="wAvg">Team AVG, season (active roster) &mdash; r=0.041</label><input type="number" id="wAvg" step="0.001" value="0.041"></div>
       <div class="field"><label for="wSlg">Team SLG, season (active roster) &mdash; r=0.033</label><input type="number" id="wSlg" step="0.001" value="0.033"></div>
-      <div class="field"><label for="wHomeAway">Home/away win% (not correlation-studied)</label><input type="number" id="wHomeAway" step="0.01" value="0.10"></div>
+      <div class="field"><label for="wHomeAway">Home field (plain is-home flag) &mdash; r=0.065</label><input type="number" id="wHomeAway" step="0.001" value="0.065"></div>
       <div class="field"><label for="wSpEra">Starting pitcher ERA (L4) &mdash; kept, lowest weight</label><input type="number" id="wSpEra" step="0.01" value="0.02"></div>
     </div>
 
@@ -791,7 +791,6 @@
       <div class="field"><label for="spHr9VsOppHrRateDiffMean">SP HR/9 vs opp HR rate diff mean</label><input type="number" id="spHr9VsOppHrRateDiffMean" step="0.01" value="1.17"></div>
       <div class="field"><label for="spHr9VsOppHrRateDiffSd">SP HR/9 vs opp HR rate diff st. dev.</label><input type="number" id="spHr9VsOppHrRateDiffSd" step="0.01" value="0.50"></div>
       <div class="field"><label for="winSd">L10 win% st. dev.</label><input type="number" id="winSd" step="0.01" value="0.16"></div>
-      <div class="field"><label for="homeAwaySd">Home/away win% st. dev.</label><input type="number" id="homeAwaySd" step="0.001" value="0.085"></div>
       <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="5.0"></div>
     </div>
 
@@ -950,7 +949,7 @@
   <details class="howitworks">
     <summary>How this model works</summary>
     <div class="steps">
-      <p><strong>1. Composite rating.</strong> Each of the 17 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>) and combined with your weights into a single Team Strength Index (TSI). ERA/WHIP/runs-allowed z-scores are inverted since lower is better there. Default weights aren't arbitrary &mdash; 15 of the 17 are each stat's actual correlation with winning, measured by backtesting the 2025 season game-by-game (2,117 games) in a separate pipeline: starting pitcher season ERA came out strongest (r&nbsp;=&nbsp;0.148), then SP season WHIP (r&nbsp;=&nbsp;0.106), then SP WHIP vs. the opposing lineup's active-roster batting AVG (r&nbsp;=&nbsp;0.103), run differential and runs allowed per game, SP BB/9 and HR/9 vs. the opposing lineup's active-roster walk/HR rate, last-7-games team OPS, L10 win%, team OBP, bullpen ERA, season team OPS, runs scored per game, team AVG, and team SLG (r&nbsp;=&nbsp;0.033 at the bottom). SP ERA (last 4 starts) is kept at a deliberately low, non-correlation-derived weight, and home/away win% keeps a moderate weight of its own &mdash; neither was part of that backtest. The three &ldquo;vs. opposing lineup&rdquo; stats are genuinely cross-team: team A's TSI reads team A's own SP rate stat AND team B's own batting rate stat, mixing different units (WHIP/HR9/BB9 are per-9-innings, AVG/HR-rate/BB-rate are per-at-bat) on purpose &mdash; there's no textbook formula being approximated, it's an empirically-found matchup signal, calibrated (mean/SD) directly off the real distribution of that diff in the 2025 backtest. Every stat except runs scored/allowed/differential and the starter's own numbers is built by summing only players on that team's <em>current active roster</em> &mdash; anyone hurt, optioned, DFA'd, or traded away is excluded, the same principle bullpen ERA already used, now applied to team batting too. Bullpen ERA sums earned runs and innings pitched across every reliever (zero starts this season) on today's active roster; team batting (AVG/OBP/SLG/OPS/HR-rate/BB-rate, season and last-7) sums the same way across today's active position players. Only the home/away split matching where each team is actually playing feeds in; the other stays visible but unused.</p>
+      <p><strong>1. Composite rating.</strong> Each of the 17 inputs is converted to a z-score against the league baselines above (<code>(value &minus; mean) / SD</code>) and combined with your weights into a single Team Strength Index (TSI). ERA/WHIP/runs-allowed z-scores are inverted since lower is better there. Default weights aren't arbitrary &mdash; 16 of the 17 are each stat's actual correlation with winning, measured by backtesting the 2025 season game-by-game (2,117 games) in a separate pipeline: starting pitcher season ERA came out strongest (r&nbsp;=&nbsp;0.148), then SP season WHIP (r&nbsp;=&nbsp;0.106), then SP WHIP vs. the opposing lineup's active-roster batting AVG (r&nbsp;=&nbsp;0.103), run differential and runs allowed per game, SP BB/9 and HR/9 vs. the opposing lineup's active-roster walk/HR rate, last-7-games team OPS, L10 win%, team OBP, bullpen ERA, season team OPS, runs scored per game, team AVG, team SLG, and a plain home-field flag (r&nbsp;=&nbsp;0.065 at the bottom &mdash; see below). SP ERA (last 4 starts) is kept at a deliberately low, non-correlation-derived weight &mdash; its own measured correlation came out essentially at noise level (r&nbsp;&asymp;&nbsp;0.02&ndash;0.03), so the low weight was the right instinct all along. The three &ldquo;vs. opposing lineup&rdquo; stats are genuinely cross-team: team A's TSI reads team A's own SP rate stat AND team B's own batting rate stat, mixing different units (WHIP/HR9/BB9 are per-9-innings, AVG/HR-rate/BB-rate are per-at-bat) on purpose &mdash; there's no textbook formula being approximated, it's an empirically-found matchup signal, calibrated (mean/SD) directly off the real distribution of that diff in the 2025 backtest. Every stat except runs scored/allowed/differential, home field, and the starter's own numbers is built by summing only players on that team's <em>current active roster</em> &mdash; anyone hurt, optioned, DFA'd, or traded away is excluded, the same principle bullpen ERA already used, now applied to team batting too. Bullpen ERA sums earned runs and innings pitched across every reliever (zero starts this season) on today's active roster; team batting (AVG/OBP/SLG/OPS/HR-rate/BB-rate, season and last-7) sums the same way across today's active position players. Home field uses a plain &ldquo;is this team home today&rdquo; flag (r&nbsp;=&nbsp;0.065) rather than each team's own home/away win% split (r&nbsp;=&nbsp;0.046 in the same backtest) &mdash; a team's own home/away record so far this season is itself a small, noisy sample, while the universal &ldquo;home teams win a bit more often&rdquo; pattern held up as the more stable signal. Home win%/away win% below still get fetched and stay visible as reference info, they just no longer drive the composite.</p>
       <p><strong>2. Implied win%.</strong> Each team's TSI is passed through a logistic curve, dampened by the &ldquo;confidence dampening&rdquo; constant, so a strong composite edge still tops out around 65&ndash;70% &mdash; consistent with how much single-game variance real baseball has.</p>
       <p><strong>3. Head-to-head via log5.</strong> The two teams' implied win%s (p<sub>A</sub>, p<sub>B</sub>) are combined with Bill James' log5 formula: <code>P(A) = (p<sub>A</sub> &minus; p<sub>A</sub>p<sub>B</sub>) / (p<sub>A</sub> + p<sub>B</sub> &minus; 2p<sub>A</sub>p<sub>B</sub>)</code>. This is the model's final win probability.</p>
       <p><strong>4. De-vig the market.</strong> If you enter both Kalshi prices, they're normalized to sum to 100% (<code>priceA / (priceA + priceB)</code>) so the comparison isn't partly just the exchange's spread.</p>
@@ -1009,7 +1008,12 @@ function compositeTSI(stats, weights, base) {
   const winZ = z(stats.winPct, 0.5, base.winSd);
   const spEraZ = -z(stats.spEra, base.spEraMean, base.spEraSd);
   const seasonSpEraZ = -z(stats.seasonSpEra, base.seasonSpEraMean, base.seasonSpEraSd);
-  const homeAwayZ = z(stats.homeAwayWinPct, 0.5, base.homeAwaySd);
+  // Plain "is this team home" flag (r=0.065 full-season backtest) beat each team's own
+  // home/away split (r=0.046). Treated as a Bernoulli(0.5) indicator -- home=1, away=0,
+  // z-scored against that indicator's own fixed mean/SD (0.5/0.5) so it slots into the same
+  // weighted-sum framework as every other stat, with no tunable baseline needed (a fair
+  // coin's mean/SD are a fact, not something to fit).
+  const homeAwayZ = z(stats.isHome ? 1 : 0, 0.5, 0.5);
   const spWhipZ = -z(stats.spWhip, base.spWhipMean, base.spWhipSd);
   // These three mix pitcher rate stats (WHIP/HR9/BB9, per 9 innings) against the OPPOSING
   // team's batting rate stats (AVG/HR-rate/BB-rate, per at-bat) -- different units by design,
@@ -1042,8 +1046,9 @@ function recalc() {
   document.getElementById('homeOptBLabel').textContent = nameB;
 
   // Weights, auto-normalized. Raw values are each stat's real correlation |r| with winning
-  // (measured via a 2025-season backtest, 2,117 games) except wSpEra (deliberately kept lowest,
-  // not part of that study) and wHomeAway (a pre-existing feature the study didn't cover).
+  // (measured via a 2025-season backtest, 2,117 games) except wSpEra (deliberately kept
+  // lowest -- its own measured r was ~0.02-0.03, essentially noise, so the low weight was
+  // the right call all along).
   const W_KEYS = ['seasonSpEra', 'spWhip', 'spWhipVsOppAvgDiff', 'runDiffPerGm', 'runsAllowedPerGm',
     'spBb9VsOppBbRateDiff', 'spHr9VsOppHrRateDiff', 'opsL7', 'win', 'obp',
     'bullpenEra', 'ops', 'runsScoredPerGm', 'avg', 'slg', 'homeAway', 'spEra'];
@@ -1068,20 +1073,22 @@ function recalc() {
     spWhipVsOppAvgDiffMean: val('spWhipVsOppAvgDiffMean'), spWhipVsOppAvgDiffSd: val('spWhipVsOppAvgDiffSd'),
     spBb9VsOppBbRateDiffMean: val('spBb9VsOppBbRateDiffMean'), spBb9VsOppBbRateDiffSd: val('spBb9VsOppBbRateDiffSd'),
     spHr9VsOppHrRateDiffMean: val('spHr9VsOppHrRateDiffMean'), spHr9VsOppHrRateDiffSd: val('spHr9VsOppHrRateDiffSd'),
-    winSd: val('winSd'), homeAwaySd: val('homeAwaySd')
+    winSd: val('winSd')
   };
   const scale = val('scale');
 
-  // Only the split matching where each team actually plays this game feeds the model —
-  // the other split stays visible but unused, so a fetch doesn't silently overwrite your intent.
+  // Home-field signal: a plain "is this team home" flag beat each team's own home/away split
+  // in the 2025 backtest (r=0.065 vs r=0.046 for the split) -- a team's own home/away record
+  // is itself a small, noisy in-season sample, while "home teams win a bit more, universally"
+  // turned out to be the more stable pattern. homeWinPctA/B and awayWinPctA/B stay visible below
+  // as reference data (still fetched from standings splits) but no longer feed the composite.
   const homeTeam = document.querySelector('input[name="homeTeam"]:checked').value;
-  const homeAwayA = homeTeam === 'A' ? val('homeWinPctA') : val('awayWinPctA');
-  const homeAwayB = homeTeam === 'B' ? val('homeWinPctB') : val('awayWinPctB');
+  const isHomeA = homeTeam === 'A', isHomeB = homeTeam === 'B';
 
   // The three "SP vs opposing lineup" stats are genuinely cross-team -- team A's pitcher rate
   // gets compared against team B's OWN batting rate, not team A's. So readStats needs to know
   // the other side too, to pull its avg/hrRate/bbRate as the "opp" values feeding compositeTSI.
-  function readStats(side, otherSide, homeAwayVal) {
+  function readStats(side, otherSide, isHome) {
     return {
       ops: val('ops' + side), opsL7: val('opsL7' + side), obp: val('obp' + side),
       avg: val('avg' + side), slg: val('slg' + side),
@@ -1091,10 +1098,10 @@ function recalc() {
       spEra: val('spEra' + side), seasonSpEra: val('seasonSpEra' + side),
       spWhip: val('spWhip' + side), spHr9: val('spHr9' + side), spBb9: val('spBb9' + side),
       oppAvg: val('avg' + otherSide), oppHrRate: val('hrRate' + otherSide), oppBbRate: val('bbRate' + otherSide),
-      homeAwayWinPct: homeAwayVal
+      isHome: isHome
     };
   }
-  const statsA = readStats('A', 'B', homeAwayA), statsB = readStats('B', 'A', homeAwayB);
+  const statsA = readStats('A', 'B', isHomeA), statsB = readStats('B', 'A', isHomeB);
   const tsiA = compositeTSI(statsA, w, base);
   const tsiB = compositeTSI(statsB, w, base);
 
@@ -1202,7 +1209,7 @@ function recalc() {
     spBb9VsOppBbRateDiffA: statsA.spBb9 - statsA.oppBbRate, spBb9VsOppBbRateDiffB: statsB.spBb9 - statsB.oppBbRate,
     spHr9VsOppHrRateDiffA: statsA.spHr9 - statsA.oppHrRate, spHr9VsOppHrRateDiffB: statsB.spHr9 - statsB.oppHrRate,
     l10A: statsA.winPct, l10B: statsB.winPct,
-    homeAwayA: homeAwayA, homeAwayB: homeAwayB
+    homeAwayA: isHomeA ? 1 : 0, homeAwayB: isHomeB ? 1 : 0
   };
 }
 
@@ -1916,7 +1923,7 @@ const TRACKED_STATS = [
   { key: 'runsScoredPerGm', label: 'Runs scored /gm', higherBetter: true },
   { key: 'avg', label: 'Team AVG, season (active roster)', higherBetter: true },
   { key: 'slg', label: 'Team SLG, season (active roster)', higherBetter: true },
-  { key: 'homeAway', label: 'Home/away win%', higherBetter: true },
+  { key: 'homeAway', label: 'Home field (is-home flag)', higherBetter: true },
   { key: 'spEra', label: 'SP ERA (L4)', higherBetter: false },
   { key: 'model', label: 'Model probability', higherBetter: true },
   { key: 'market', label: 'Market probability', higherBetter: true }
