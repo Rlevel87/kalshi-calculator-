@@ -695,6 +695,14 @@
       <h2>Quick Actions</h2>
       <div class="rec-mini" id="quickRecSummary">Enter both teams&rsquo; data to see the model&rsquo;s recommendation here.</div>
       <div class="field">
+        <label for="logSideOverride">Logging trade for</label>
+        <select id="logSideOverride">
+          <option value="">Auto &mdash; whichever side has the bigger edge</option>
+          <option value="A" id="logSideOptA">Team A</option>
+          <option value="B" id="logSideOptB">Team B</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="betAmount">Bet amount ($)</label>
         <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
       </div>
@@ -1173,6 +1181,8 @@ function recalc() {
   document.getElementById('resBTitle').textContent = nameB;
   document.getElementById('homeOptALabel').textContent = nameA;
   document.getElementById('homeOptBLabel').textContent = nameB;
+  document.getElementById('logSideOptA').textContent = nameA;
+  document.getElementById('logSideOptB').textContent = nameB;
 
   // Weights, auto-normalized. Raw values are each stat's real correlation |r| with winning
   // (measured via a 2025-season backtest, 2,117 games) except wSpEra (deliberately kept
@@ -1357,7 +1367,7 @@ function recalc() {
   // numbers (not just the recommended side) to later check which stats tracked the winner.
   lastCalc = {
     nameA: nameA, nameB: nameB, side: side, edge: edge, price: price, model: model, stakeFrac: stakeFrac, bankroll: bankroll,
-    homeTeam: homeTeam, modelA: modelA, modelB: modelB, marketA: marketA, marketB: marketB,
+    homeTeam: homeTeam, modelA: modelA, modelB: modelB, marketA: marketA, marketB: marketB, rawA: rawA, rawB: rawB,
     opsA: statsA.ops, opsB: statsB.ops,
     opsL7A: statsA.opsL7, opsL7B: statsB.opsL7,
     obpA: statsA.obp, obpB: statsB.obp,
@@ -1905,20 +1915,32 @@ function logCurrentTrade() {
     return;
   }
 
+  // "Auto" (blank) uses whichever side the model's edge favored, same as before. Picking Team A
+  // or Team B explicitly logs THAT side's own numbers instead -- for a strategy like "bet every
+  // model prediction >=55%," the side actually being bet often isn't the bigger-edge one the
+  // auto-pick assumes.
+  const override = document.getElementById('logSideOverride').value;
+  const loggedSide = override || lastCalc.side;
+  const loggedModel = loggedSide === 'A' ? lastCalc.modelA : lastCalc.modelB;
+  const loggedMarket = loggedSide === 'A' ? lastCalc.marketA : lastCalc.marketB;
+  const loggedPrice = loggedSide === 'A' ? lastCalc.rawA : lastCalc.rawB;
+  const loggedName = loggedSide === 'A' ? lastCalc.nameA : lastCalc.nameB;
+
   const entries = loadLog();
   entries.push({
     id: Date.now(),
     date: new Date().toISOString().slice(0, 10),
     matchup: lastCalc.nameA + ' vs ' + lastCalc.nameB,
-    side: lastCalc.side === 'A' ? lastCalc.nameA : lastCalc.nameB,
-    price: lastCalc.price,       // the price you had entered for that team when you ran the calc
-    model: lastCalc.model,
-    edge: lastCalc.edge,
+    side: loggedName,
+    price: loggedPrice,          // the price entered for the LOGGED team, not necessarily the auto-picked one
+    model: loggedModel,
+    edge: loggedModel - loggedMarket,
     stakeDollars: stake,          // what you actually wagered
     result: 'pending'
   });
   saveLog(entries);
   betInput.value = '';
+  document.getElementById('logSideOverride').value = ''; // reset to Auto so it doesn't carry over to the next matchup
   renderLog();
 }
 
