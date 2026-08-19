@@ -998,6 +998,29 @@ function kellyFraction(p, price) {
   return Math.max(0, f);
 }
 
+// Backtested real win rate at each model-confidence level, blended across two independent
+// MLB seasons (2024 + 2025, ~2,600 games combined). Below 55% wasn't specifically validated as
+// overconfident, so the model's raw number is used as-is there. From 55% up, real win rates
+// climb roughly in step with the model's own confidence -- up to a point: everything backtested
+// at 68%+ confidence converged on ~65% real win rate in BOTH seasons independently, so that's
+// used as a flat ceiling above 68% rather than trusting the model's raw (and evidently hollow)
+// claims of 75-90%+ up there.
+const CALIBRATION_ANCHORS = [
+  [0.55, 0.614], [0.60, 0.648], [0.62, 0.653], [0.65, 0.687], [0.68, 0.650]
+];
+function calibratedTrueProb(p) {
+  if (p < CALIBRATION_ANCHORS[0][0]) return p; // below the validated range -- use the raw model number
+  if (p >= 0.68) return 0.650; // confirmed ceiling, both seasons independently
+  for (let i = 0; i < CALIBRATION_ANCHORS.length - 1; i++) {
+    const [p0, c0] = CALIBRATION_ANCHORS[i], [p1, c1] = CALIBRATION_ANCHORS[i + 1];
+    if (p >= p0 && p <= p1) {
+      const t = (p - p0) / (p1 - p0);
+      return c0 + t * (c1 - c0); // linear interpolation between the two nearest backtested anchors
+    }
+  }
+  return p;
+}
+
 function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
 function fmtPts(x) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + ' pts'; }
 
@@ -1229,14 +1252,11 @@ function recalc() {
   evVal.textContent = (ev >= 0 ? '+$' : '-$') + Math.abs(ev).toFixed(3);
   evSub.textContent = 'per $1 staked on ' + name;
 
-  // Backtest-calibrated stake: a 2025-season backtest (2,117 games, 1,475 with complete data)
-  // found the live model's own >=62%-probability picks actually won ~64% of the time in
-  // reality (n=380) -- not the ~69% average the model itself was claiming in that range. Below
-  // 62% the model's raw number wasn't specifically found to be overconfident, so it's used as-is.
-  // This does NOT change the recommendation/banner/edge logic above -- same side, same price,
-  // just a second Kelly stake computed off the backtested-real probability instead of the raw
-  // model number, so a clearly overconfident pick doesn't also get an oversized suggested stake.
-  function calibratedTrueProb(p) { return p >= 0.62 ? 0.64 : p; }
+  // Backtest-calibrated stake: uses calibratedTrueProb() (piecewise, from a 2-season backtest
+  // covering ~2,600 games) instead of the model's raw probability. This does NOT change the
+  // recommendation/banner/edge logic above -- same side, same price, just a second Kelly stake
+  // computed off the backtested-real probability so an overconfident pick doesn't also get an
+  // oversized suggested stake.
 
   let stakeFrac = 0;
   if (edge >= threshold) {
@@ -1250,9 +1270,9 @@ function recalc() {
     const calibProb = calibratedTrueProb(model);
     const calibStakeFrac = kellyFraction(calibProb, price) * kellyFrac;
     calibKellyVal.textContent = '$' + (calibStakeFrac * bankroll).toFixed(2);
-    calibKellySub.textContent = model >= 0.62
-      ? 'using 64% real win rate (backtested), not the raw ' + (model * 100).toFixed(0) + '% shown above'
-      : 'model < 62% — not backtest-flagged as overconfident, same as raw Kelly';
+    calibKellySub.textContent = model >= 0.55
+      ? 'using ' + (calibProb * 100).toFixed(1) + '% real win rate (backtested), not the raw ' + (model * 100).toFixed(0) + '% shown above'
+      : 'model < 55% — not backtest-validated, using raw model probability';
   } else if (edge <= -threshold) {
     banner.className = 'rec-banner neg';
     recMain.textContent = 'No trade — market looks ahead of the model';
