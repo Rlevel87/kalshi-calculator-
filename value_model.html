@@ -857,6 +857,11 @@
         <div class="m-val" id="kellyVal">&mdash;</div>
         <div class="m-sub" id="kellySub">&mdash;</div>
       </div>
+      <div class="metric">
+        <div class="m-label">Suggested stake (backtest-calibrated)</div>
+        <div class="m-val" id="calibKellyVal">&mdash;</div>
+        <div class="m-sub" id="calibKellySub">&mdash;</div>
+      </div>
     </div>
   </div>
 
@@ -1212,6 +1217,8 @@ function recalc() {
   const evSub = document.getElementById('evSub');
   const kellyVal = document.getElementById('kellyVal');
   const kellySub = document.getElementById('kellySub');
+  const calibKellyVal = document.getElementById('calibKellyVal');
+  const calibKellySub = document.getElementById('calibKellySub');
 
   let side, edge, price, model, name;
   if (edgeA >= edgeB) { side = 'A'; edge = edgeA; price = rawA; model = modelA; name = nameA; }
@@ -1222,6 +1229,15 @@ function recalc() {
   evVal.textContent = (ev >= 0 ? '+$' : '-$') + Math.abs(ev).toFixed(3);
   evSub.textContent = 'per $1 staked on ' + name;
 
+  // Backtest-calibrated stake: a 2025-season backtest (2,117 games, 1,475 with complete data)
+  // found the live model's own >=62%-probability picks actually won ~64% of the time in
+  // reality (n=380) -- not the ~69% average the model itself was claiming in that range. Below
+  // 62% the model's raw number wasn't specifically found to be overconfident, so it's used as-is.
+  // This does NOT change the recommendation/banner/edge logic above -- same side, same price,
+  // just a second Kelly stake computed off the backtested-real probability instead of the raw
+  // model number, so a clearly overconfident pick doesn't also get an oversized suggested stake.
+  function calibratedTrueProb(p) { return p >= 0.62 ? 0.64 : p; }
+
   let stakeFrac = 0;
   if (edge >= threshold) {
     banner.className = 'rec-banner pos';
@@ -1230,18 +1246,29 @@ function recalc() {
     stakeFrac = kellyFraction(model, price) * kellyFrac;
     kellyVal.textContent = (stakeFrac * 100).toFixed(1) + '%';
     kellySub.textContent = '≈ $' + (stakeFrac * bankroll).toFixed(2) + ' of bankroll (fractional Kelly)';
+
+    const calibProb = calibratedTrueProb(model);
+    const calibStakeFrac = kellyFraction(calibProb, price) * kellyFrac;
+    calibKellyVal.textContent = '$' + (calibStakeFrac * bankroll).toFixed(2);
+    calibKellySub.textContent = model >= 0.62
+      ? 'using 64% real win rate (backtested), not the raw ' + (model * 100).toFixed(0) + '% shown above'
+      : 'model < 62% — not backtest-flagged as overconfident, same as raw Kelly';
   } else if (edge <= -threshold) {
     banner.className = 'rec-banner neg';
     recMain.textContent = 'No trade — market looks ahead of the model';
     recEdgeVal.textContent = fmtPts(edge);
     kellyVal.textContent = '$0.00';
     kellySub.textContent = 'no positive-EV side found above threshold';
+    calibKellyVal.textContent = '$0.00';
+    calibKellySub.textContent = 'no positive-EV side found above threshold';
   } else {
     banner.className = 'rec-banner';
     recMain.textContent = 'Pass — edge below threshold';
     recEdgeVal.textContent = fmtPts(edge);
     kellyVal.textContent = '$0.00';
     kellySub.textContent = 'edge too small to act on';
+    calibKellyVal.textContent = '$0.00';
+    calibKellySub.textContent = 'edge too small to act on';
   }
 
   // Mirror the recommendation into the Quick Actions box next to Team B, so logging a
