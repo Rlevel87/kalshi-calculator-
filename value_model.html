@@ -126,6 +126,8 @@
   }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .bankroll-ladder { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--ink-muted); }
 
   .danger-zone { border-color: var(--neg); }
   .btn-danger { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
@@ -801,7 +803,15 @@
     <div class="adv-sub">Staking</div>
     <div class="adv-grid">
       <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.15"></div>
-      <div class="field"><label for="bankroll">Bankroll ($) &mdash; update this as your real balance changes; Kelly scales every suggestion off it</label><input type="number" id="bankroll" step="1" value="14"></div>
+      <div class="field">
+        <label for="bankroll">Bankroll ($) &mdash; Kelly scales every suggestion off this</label>
+        <input type="number" id="bankroll" step="1" value="100">
+        <div class="bankroll-ladder">
+          <button type="button" class="btn btn-sm" onclick="bumpBankroll(-100)">&minus; $100</button>
+          <span id="bankrollRung">Rung 1 of 10</span>
+          <button type="button" class="btn btn-sm" onclick="bumpBankroll(100)">+ $100</button>
+        </div>
+      </div>
       <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
     </div>
   </details>
@@ -1000,6 +1010,23 @@ function kalshiFee(price) {
   return Math.ceil(0.07 * price * (1 - price) * 100) / 100;
 }
 function effectivePrice(price) { return price + kalshiFee(price); }
+
+// Bankroll ladder: +$100/-$100 buttons step through the 100/200/.../1000 rungs the bankroll
+// field is meant to grow through as the real account grows. Clamped to that range -- past 1000
+// the field is still freely editable by hand, this control just stops being the tool for it.
+function bumpBankroll(delta) {
+  const el = document.getElementById('bankroll');
+  const next = Math.max(100, Math.min(1000, (parseFloat(el.value) || 0) + delta));
+  el.value = next;
+  recalc();
+}
+function updateBankrollRung() {
+  const b = val('bankroll');
+  const rungEl = document.getElementById('bankrollRung');
+  if (!rungEl) return;
+  const rung = Math.max(1, Math.min(10, Math.round(b / 100)));
+  rungEl.textContent = 'Rung ' + rung + ' of 10 ($' + (rung * 100) + ')';
+}
 
 function kellyFraction(p, price) {
   if (price <= 0 || price >= 1) return 0;
@@ -1242,6 +1269,7 @@ function recalc() {
   const threshold = val('edgeThreshold') / 100;
   const kellyFrac = val('kellyFrac');
   const bankroll = val('bankroll');
+  updateBankrollRung();
 
   const banner = document.getElementById('recBanner');
   const recMain = document.getElementById('recMain');
