@@ -801,7 +801,7 @@
     <div class="adv-sub">Staking</div>
     <div class="adv-grid">
       <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.15"></div>
-      <div class="field"><label for="bankroll">Bankroll ($)</label><input type="number" id="bankroll" step="10" value="1000"></div>
+      <div class="field"><label for="bankroll">Bankroll ($) &mdash; update this as your real balance changes; Kelly scales every suggestion off it</label><input type="number" id="bankroll" step="1" value="14"></div>
       <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
     </div>
   </details>
@@ -848,17 +848,17 @@
         <div class="m-sub">model &minus; market, percentage points</div>
       </div>
       <div class="metric">
-        <div class="m-label">EV per $1 contract</div>
+        <div class="m-label">EV per contract (fee incl.)</div>
         <div class="m-val" id="evVal">&mdash;</div>
         <div class="m-sub" id="evSub">&mdash;</div>
       </div>
       <div class="metric">
-        <div class="m-label">Suggested stake</div>
+        <div class="m-label">Contracts to buy</div>
         <div class="m-val" id="kellyVal">&mdash;</div>
         <div class="m-sub" id="kellySub">&mdash;</div>
       </div>
       <div class="metric">
-        <div class="m-label">Suggested stake (backtest-calibrated)</div>
+        <div class="m-label">Contracts to buy (backtest-calibrated)</div>
         <div class="m-val" id="calibKellyVal">&mdash;</div>
         <div class="m-sub" id="calibKellySub">&mdash;</div>
       </div>
@@ -962,7 +962,7 @@
       <p><strong>2. Implied win%.</strong> Each team's TSI is passed through a logistic curve, dampened by the &ldquo;confidence dampening&rdquo; constant, so a strong composite edge still tops out around 65&ndash;70% &mdash; consistent with how much single-game variance real baseball has.</p>
       <p><strong>3. Head-to-head via log5.</strong> The two teams' implied win%s (p<sub>A</sub>, p<sub>B</sub>) are combined with Bill James' log5 formula: <code>P(A) = (p<sub>A</sub> &minus; p<sub>A</sub>p<sub>B</sub>) / (p<sub>A</sub> + p<sub>B</sub> &minus; 2p<sub>A</sub>p<sub>B</sub>)</code>. This is the model's final win probability.</p>
       <p><strong>4. De-vig the market.</strong> If you enter both Kalshi prices, they're normalized to sum to 100% (<code>priceA / (priceA + priceB)</code>) so the comparison isn't partly just the exchange's spread.</p>
-      <p><strong>5. Edge, EV, Kelly.</strong> Edge = model probability &minus; market probability. EV per $1 contract = model probability &minus; price (as a fraction). Suggested stake uses the Kelly criterion (<code>f* = p &minus; (1&minus;p)&middot;price/(1&minus;price)</code>), scaled down by your Kelly fraction as a bankroll-management safety margin.</p>
+      <p><strong>5. Edge, EV, Kelly, fees, and contracts.</strong> Edge (the buy/pass decision) = model probability &minus; de-vigged market probability, no fee involved &mdash; that's purely "is there a real mispricing." Once there is, everything about how much to risk switches to using price + Kalshi's real trading fee (<code>0.07&middot;price&middot;(1&minus;price)</code>, rounded up to the cent, charged at entry regardless of outcome) in place of price alone, since paying a fee is economically identical to the price itself being higher. EV per contract = model probability &minus; (price + fee). Kelly fraction (<code>f* = p &minus; (1&minus;p)&middot;(price+fee)/(1&minus;price&minus;fee)</code>) &times; your Kelly-fraction safety margin &times; your bankroll gives a dollar figure, which then gets divided by (price + fee) and rounded <em>down</em> to a whole number &mdash; Kalshi only sells whole contracts, so this never suggests spending more than you can actually place an order for.</p>
     </div>
     <div class="disclaimer">
       7-day and 4-start samples are small and noisy &mdash; treat this as a decision-support heuristic to tune over time against your own results, not a guaranteed edge. Kalshi prices move; re-check before trading. Never stake more than you can afford to lose, and consider using a smaller Kelly fraction (e.g. 0.1&ndash;0.25) to dampen variance from a model this sensitive to small samples. &ldquo;Fetch live data&rdquo; pulls from MLB's public Stats API (statsapi.mlb.com), which is free and unauthenticated but not an official partner feed &mdash; spot-check anything that looks off before trading on it.
@@ -989,6 +989,17 @@ function log5(pA, pB) {
   if (den <= 0) return 0.5;
   return (pA - pA * pB) / den;
 }
+
+// Kalshi's real trading fee: 0.07 * price * (1-price) per contract, rounded UP to the nearest
+// cent (Kalshi never rounds a fee down). Charged once at entry regardless of win/loss, and
+// doesn't change the $1 payout on a win -- economically that's identical to the price itself
+// just being higher, so "price + fee" is used everywhere "price" alone was used before, both
+// for Kelly sizing and for EV.
+function kalshiFee(price) {
+  if (price <= 0 || price >= 1) return 0;
+  return Math.ceil(0.07 * price * (1 - price) * 100) / 100;
+}
+function effectivePrice(price) { return price + kalshiFee(price); }
 
 function kellyFraction(p, price) {
   if (price <= 0 || price >= 1) return 0;
@@ -1247,10 +1258,22 @@ function recalc() {
   if (edgeA >= edgeB) { side = 'A'; edge = edgeA; price = rawA; model = modelA; name = nameA; }
   else { side = 'B'; edge = edgeB; price = rawB; model = modelB; name = nameB; }
 
+  // All actual money math (EV, Kelly sizing, contract cost) uses price + Kalshi's real trading
+  // fee -- the fee is paid at entry regardless of outcome and doesn't change the $1 payout on a
+  // win, so it's economically identical to the price itself being higher. The edge/recommendation
+  // decision above still compares model vs. the de-vigged MARKET price (fees aren't part of
+  // whether there's a mispricing -- they're part of what it costs you to act on one).
+  const feePrice = effectivePrice(price);
+
   edgeVal.textContent = fmtPts(edge);
-  const ev = model - price;
+  const ev = model - feePrice;
   evVal.textContent = (ev >= 0 ? '+$' : '-$') + Math.abs(ev).toFixed(3);
-  evSub.textContent = 'per $1 staked on ' + name;
+  evSub.textContent = 'per contract on ' + name + ' (incl. ' + (kalshiFee(price) * 100).toFixed(1) + 'c fee)';
+
+  function contractsLine(stakeDollars) {
+    const contracts = Math.floor(stakeDollars / feePrice); // rounds down -- never suggests more than you can actually afford
+    return { contracts: contracts, cost: contracts * feePrice };
+  }
 
   // Backtest-calibrated stake: uses calibratedTrueProb() (piecewise, from a 2-season backtest
   // covering ~2,600 games) instead of the model's raw probability. This does NOT change the
@@ -1263,31 +1286,33 @@ function recalc() {
     banner.className = 'rec-banner pos';
     recMain.textContent = 'Buy ' + name + ' Yes';
     recEdgeVal.textContent = fmtPts(edge);
-    stakeFrac = kellyFraction(model, price) * kellyFrac;
-    kellyVal.textContent = (stakeFrac * 100).toFixed(1) + '%';
-    kellySub.textContent = '≈ $' + (stakeFrac * bankroll).toFixed(2) + ' of bankroll (fractional Kelly)';
+    stakeFrac = kellyFraction(model, feePrice) * kellyFrac;
+    const rawStakeDollars = stakeFrac * bankroll;
+    const raw = contractsLine(rawStakeDollars);
+    kellyVal.textContent = raw.contracts + ' contract' + (raw.contracts === 1 ? '' : 's');
+    kellySub.textContent = '$' + raw.cost.toFixed(2) + ' actual cost (incl. fee) — Kelly suggested $' + rawStakeDollars.toFixed(2) + ' (' + (stakeFrac * 100).toFixed(1) + '% of bankroll) before rounding down to whole contracts';
 
     const calibProb = calibratedTrueProb(model);
-    const calibStakeFrac = kellyFraction(calibProb, price) * kellyFrac;
-    calibKellyVal.textContent = '$' + (calibStakeFrac * bankroll).toFixed(2);
-    calibKellySub.textContent = model >= 0.55
-      ? 'using ' + (calibProb * 100).toFixed(1) + '% real win rate (backtested), not the raw ' + (model * 100).toFixed(0) + '% shown above'
-      : 'model < 55% — not backtest-validated, using raw model probability';
+    const calibStakeFrac = kellyFraction(calibProb, feePrice) * kellyFrac;
+    const calibStakeDollars = calibStakeFrac * bankroll;
+    const calib = contractsLine(calibStakeDollars);
+    calibKellyVal.textContent = calib.contracts + ' contract' + (calib.contracts === 1 ? '' : 's');
+    calibKellySub.textContent = '$' + calib.cost.toFixed(2) + ' actual cost (incl. fee) — using ' + (calibProb * 100).toFixed(1) + '% real win rate (backtested, not the raw ' + (model * 100).toFixed(0) + '% above), Kelly suggested $' + calibStakeDollars.toFixed(2);
   } else if (edge <= -threshold) {
     banner.className = 'rec-banner neg';
     recMain.textContent = 'No trade — market looks ahead of the model';
     recEdgeVal.textContent = fmtPts(edge);
-    kellyVal.textContent = '$0.00';
+    kellyVal.textContent = '0 contracts';
     kellySub.textContent = 'no positive-EV side found above threshold';
-    calibKellyVal.textContent = '$0.00';
+    calibKellyVal.textContent = '0 contracts';
     calibKellySub.textContent = 'no positive-EV side found above threshold';
   } else {
     banner.className = 'rec-banner';
     recMain.textContent = 'Pass — edge below threshold';
     recEdgeVal.textContent = fmtPts(edge);
-    kellyVal.textContent = '$0.00';
+    kellyVal.textContent = '0 contracts';
     kellySub.textContent = 'edge too small to act on';
-    calibKellyVal.textContent = '$0.00';
+    calibKellyVal.textContent = '0 contracts';
     calibKellySub.textContent = 'edge too small to act on';
   }
 
