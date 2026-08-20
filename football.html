@@ -162,7 +162,23 @@
   .depth-player.starter { color: var(--ink); font-weight: 600; }
   .depth-player.backup { color: var(--ink-faint); }
   .depth-player.inactive { color: var(--neg); text-decoration: line-through; }
+  .depth-player.clickable { cursor: pointer; }
+  .depth-player.clickable:hover { background: var(--panel-alt); text-decoration: underline; }
   .injury-tag { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: var(--neg-bg); color: var(--neg); margin-left: 4px; text-decoration: none; }
+
+  /* ---------------- Player stats modal ---------------- */
+  .player-modal-box { max-width: 640px; max-height: 82vh; overflow-y: auto; }
+  .player-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .player-modal-header h3 { margin: 0; color: var(--ink); font-size: 17px; }
+  .player-modal-header select { width: auto; }
+  .player-modal-sub { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: 14px; }
+  .player-stat-cat { margin-bottom: 16px; }
+  .player-stat-cat:last-child { margin-bottom: 0; }
+  .player-stat-cat h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+  .player-stat-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .player-stat-table td { padding: 4px 8px; border-bottom: 1px solid var(--rule); }
+  .player-stat-table td:first-child { color: var(--ink-muted); }
+  .player-stat-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
 
   .hidden { display: none !important; }
 
@@ -469,6 +485,20 @@
           <span class="hold-fill" id="holdFill"></span>
           <span class="hold-label">Hold to delete</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="playerStatsModal">
+    <div class="modal-box player-modal-box">
+      <div class="player-modal-header">
+        <h3 id="playerStatsName">Player</h3>
+        <select id="playerStatsYear" onchange="loadPlayerStatsForYear()"></select>
+      </div>
+      <div class="player-modal-sub" id="playerStatsPos">&mdash;</div>
+      <div id="playerStatsBody">Loading&hellip;</div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="btn" onclick="closePlayerStatsModal()">Close</button>
       </div>
     </div>
   </div>

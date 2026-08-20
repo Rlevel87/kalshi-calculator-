@@ -53,26 +53,28 @@ function weights(prefix, keys) {
 }
 
 /* ---------------------------- server proxy fetch helpers ---------------------------- */
-async function espnGet(path) {
-  const res = await fetch('/api/espn/site' + path);
+// Shared by every proxy call. If server.py isn't actually running behind this page (opened as
+// a bare file, or through some other static-file previewer with no /api routes), the fetch
+// often still "succeeds" -- it just gets an HTML page back instead of JSON, and .json() on that
+// throws a cryptic "Unexpected token '<'..." error. Checking content-type first turns that into
+// a plain, actionable message instead.
+async function fetchJson(url) {
+  const res = await fetch(url);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.indexOf('application/json') === -1) {
+    throw new Error('Server isn\'t running — start it via the "Kalshi Value Models" desktop shortcut, or run "python server.py" from the kalshi-calculator- folder.');
+  }
   const data = await res.json();
   if (!res.ok) throw new Error((data && data.error) || ('Server returned ' + res.status));
   return data;
 }
-async function espnWebGet(path) {
-  const res = await fetch('/api/espn/web' + path);
-  const data = await res.json();
-  if (!res.ok) throw new Error((data && data.error) || ('Server returned ' + res.status));
-  return data;
-}
+async function espnGet(path) { return fetchJson('/api/espn/site' + path); }
+async function espnWebGet(path) { return fetchJson('/api/espn/web' + path); }
 async function teamSummaryGet(team, season) {
   // No season given -> let the server pick (tries current NFL season, falls back to the
   // prior completed one automatically). Passing one explicitly overrides that.
   const qs = season ? ('?season=' + encodeURIComponent(season)) : '';
-  const res = await fetch('/api/nfl/team-summary/' + encodeURIComponent(team) + qs);
-  const data = await res.json();
-  if (!res.ok) throw new Error((data && data.error) || ('Server returned ' + res.status));
-  return data;
+  return fetchJson('/api/nfl/team-summary/' + encodeURIComponent(team) + qs);
 }
 
 /* ---------------------------- team resolution ---------------------------- */
@@ -152,6 +154,16 @@ async function getDepthChart(teamAbbrev) {
   });
   return { offenseGroup: offenseGroup || null, defenseGroup: defenseGroup || null };
 }
+// One call returns every season ESPN has on file for this player, across every stat category
+// (passing/rushing/receiving/defensive/kicking/punting -- whichever apply). Fetched once when
+// the stats modal opens; switching the year dropdown just re-slices this same cached result,
+// no extra network round-trip per year.
+async function getPlayerCategories(athleteId) {
+  const data = await espnWebGet('/athletes/' + athleteId + '/stats');
+  return data.categories || [];
+}
+function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+
 function buildSlotList(group) {
   if (!group) return [];
   return Object.keys(group.positions).map(function (key) {
@@ -235,7 +247,9 @@ function renderDepthChartGrid(nameA, offA, defA, nameB, offB, defB, injuryMap) {
         const inj = injuryMap[a.id];
         const cls = i === 0 ? (inj && inj.inactive ? 'inactive' : 'starter') : 'backup';
         const tag = inj ? '<span class="injury-tag" title="' + (inj.detail || '') + '">' + inj.status + '</span>' : '';
-        return '<span class="depth-player ' + cls + '">' + a.displayName + tag + '</span>';
+        return '<span class="depth-player clickable ' + cls + '" data-athlete-id="' + a.id +
+          '" data-athlete-name="' + escapeAttr(a.displayName) + '" data-pos="' + escapeAttr(slot.abbrev) +
+          '" title="Click to see season stats">' + a.displayName + tag + '</span>';
       }).join(' &middot; ');
       return '<div class="depth-pos-row"><span class="depth-pos-label">' + slot.abbrev + '</span>' + (names || '<span class="empty-note">—</span>') + '</div>';
     }).join('');
@@ -246,6 +260,76 @@ function renderDepthChartGrid(nameA, offA, defA, nameB, offB, defB, injuryMap) {
   }
   el.innerHTML = teamBlock(nameA, offA, defA) + teamBlock(nameB, offB, defB);
 }
+
+/* ---------------------------- player stats modal (click a depth chart name) ---------------------------- */
+let playerStatsCategories = null; // cached ESPN categories for whichever athlete is currently open
+
+function statsYearOptions() {
+  const years = [];
+  for (let i = 0; i < 6; i++) years.push(String(NFL_SEASON_YEAR - i));
+  return years;
+}
+function humanizeStatName(name) {
+  // camelCase -> "Spaced Words", e.g. "passingYards" -> "Passing Yards"
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, function (c) { return c.toUpperCase(); });
+}
+async function openPlayerStatsModal(athleteId, playerName, posAbbrev) {
+  $('playerStatsModal').classList.remove('hidden');
+  $('playerStatsName').textContent = playerName;
+  $('playerStatsPos').textContent = posAbbrev || '';
+  $('playerStatsBody').innerHTML = '<div class="fetch-status">Loading stats…</div>';
+
+  const yearSelect = $('playerStatsYear');
+  yearSelect.innerHTML = '';
+  statsYearOptions().forEach(function (y) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+  yearSelect.value = CURRENT_SEASON; // preset to the present year, per the ask
+
+  playerStatsCategories = null;
+  try {
+    playerStatsCategories = await getPlayerCategories(athleteId);
+    renderPlayerStatsForYear(yearSelect.value);
+  } catch (err) {
+    $('playerStatsBody').innerHTML = '<div class="fetch-status">Could not load stats: ' + err.message + '</div>';
+  }
+}
+function closePlayerStatsModal() {
+  $('playerStatsModal').classList.add('hidden');
+  playerStatsCategories = null;
+}
+function loadPlayerStatsForYear() {
+  if (!playerStatsCategories) return;
+  renderPlayerStatsForYear($('playerStatsYear').value);
+}
+function renderPlayerStatsForYear(year) {
+  const body = $('playerStatsBody');
+  if (!playerStatsCategories) { body.innerHTML = '<div class="fetch-status">No data.</div>'; return; }
+  let html = '';
+  playerStatsCategories.forEach(function (cat) {
+    if (!cat.statistics || !cat.names) return;
+    const entry = cat.statistics.find(function (s) { return s.season && String(s.season.year) === String(year); });
+    if (!entry) return;
+    const rows = cat.names.map(function (name, i) {
+      const raw = entry.stats[i];
+      if (raw === undefined || raw === null || raw === '-' || raw === '') return '';
+      return '<tr><td>' + humanizeStatName(name) + '</td><td>' + raw + '</td></tr>';
+    }).join('');
+    if (!rows) return;
+    const label = cat.displayName || humanizeStatName(cat.name || 'Stats');
+    html += '<div class="player-stat-cat"><h4>' + label + '</h4><table class="player-stat-table"><tbody>' + rows + '</tbody></table></div>';
+  });
+  body.innerHTML = html || '<div class="fetch-status">No stats found for ' + year + '.</div>';
+}
+// One delegated listener covers every player name, present and future re-renders alike --
+// no need to re-attach after each fetchMatchup() rebuilds the depth chart grid.
+document.getElementById('depthChartGrid').addEventListener('click', function (e) {
+  const el = e.target.closest('.depth-player');
+  if (!el || !el.dataset.athleteId) return;
+  openPlayerStatsModal(el.dataset.athleteId, el.dataset.athleteName, el.dataset.pos);
+});
 
 function applyTeamSummaryToInputs(side, s) {
   if (!s) return;
