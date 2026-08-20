@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalshi College Football Value Model</title>
+<style>
+  :root {
+    --bg: #0e1416;
+    --panel: #161f22;
+    --panel-alt: #10171a;
+    --rule: #26343a;
+    --ink: #ffffff;
+    --ink-muted: #8fa3a9;
+    --ink-faint: #5c6e73;
+    --accent: #4fb0c6;
+    --pos: #4caf7d;
+    --pos-bg: rgba(76, 175, 125, 0.12);
+    --neg: #d9705f;
+    --neg-bg: rgba(217, 112, 95, 0.12);
+    --neutral: #c9a24b;
+    --team-a-color: var(--accent);
+    --team-b-color: var(--neutral);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+  .num, input, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; }
+  ::selection { background: var(--accent); color: #071013; }
+
+  header { padding: 22px 16px 16px; border-bottom: 1px solid var(--rule); background: var(--panel-alt); }
+  .back-link { display: inline-block; font-size: 12.5px; color: var(--ink-muted); text-decoration: none; margin-bottom: 10px; }
+  .back-link:hover { color: var(--accent); }
+  header h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-muted); font-size: 14px; max-width: 70ch; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 24px 80px; }
+
+  .matchup-banner { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 18px; }
+  .mb-side { display: flex; align-items: center; gap: 12px; flex: 1; }
+  .mb-a { justify-content: flex-end; text-align: right; }
+  .mb-b { justify-content: flex-start; text-align: left; }
+  .mb-logo { width: 56px; height: 56px; object-fit: contain; opacity: 0; transition: opacity 0.2s; }
+  .mb-logo.loaded { opacity: 1; }
+  .mb-name { font-size: 19px; font-weight: 700; }
+  .mb-vs { color: var(--ink-faint); font-size: 13px; font-weight: 700; }
+
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+  .card h2 {
+    margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .card.team-a { border-top: 3px solid var(--team-a-color); }
+  .card.team-b { border-top: 3px solid var(--team-b-color); }
+  .card.team-a h2 { color: var(--team-a-color); }
+  .card.team-b h2 { color: var(--team-b-color); }
+
+  .btn {
+    background: var(--panel-alt); border: 1px solid var(--rule); color: var(--accent);
+    padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .fetch-status { font-size: 12px; color: var(--ink-faint); margin: -6px 0 14px; min-height: 15px; }
+  .empty-note { color: var(--ink); font-size: 12.5px; padding: 6px 0; }
+
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13px; color: var(--ink-muted); margin-bottom: 4px; }
+  input[type="text"], input[type="number"], select {
+    width: 100%; background: var(--panel-alt); border: 1px solid var(--rule); color: var(--ink);
+    padding: 8px 10px; border-radius: 6px; font-size: 14px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  @media (max-width: 780px) { .market-grid { grid-template-columns: 1fr; } }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+
+  details.advanced { margin-top: 18px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 4px 18px 16px; }
+  details.advanced summary { padding: 14px 0; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+  .adv-sub { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin: 16px 0 10px; }
+  .adv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; }
+
+  .rec-banner {
+    border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; border: 1px solid var(--rule); background: var(--panel);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rec-banner.pos { border-color: var(--pos); background: var(--pos-bg); }
+  .rec-banner.neg { border-color: var(--neg); background: var(--neg-bg); }
+  .rec-banner .rec-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted); margin-bottom: 4px; }
+  .rec-banner .rec-main { font-size: 20px; font-weight: 700; }
+  .rec-banner .rec-edge { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rec-banner.pos .rec-edge { color: var(--pos); }
+  .rec-banner.neg .rec-edge { color: var(--neg); }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 780px) { .compare-grid { grid-template-columns: 1fr; } }
+  .team-result { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+  .team-result h3 { margin: 0 0 12px; font-size: 14px; }
+  .bar-row { margin-bottom: 10px; }
+  .bar-label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-muted); margin-bottom: 4px; }
+  .bar-label .val { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-track { height: 7px; background: var(--panel-alt); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-fill.model { background: var(--accent); }
+  .bar-fill.market { background: var(--ink-faint); }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 18px; }
+  .metric { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .m-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: 6px; }
+  .m-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .m-sub { font-size: 11.5px; color: var(--ink-faint); margin-top: 4px; }
+
+  .pos-val { color: var(--pos); } .neg-val { color: var(--neg); }
+
+  .log-controls { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .log-controls .field { margin-bottom: 0; width: 150px; }
+  .log-summary { font-size: 13px; color: var(--ink-muted); }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th, .log-table td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+  .log-table th { color: var(--ink-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  .log-table td.num, .log-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .log-scroll { max-height: 330px; overflow-y: auto; border: 1px solid var(--rule); border-radius: 8px; }
+  .log-scroll table { border: none; }
+  .log-scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+
+  .sample-note { font-size: 12px; color: var(--ink-faint); margin-top: 10px; line-height: 1.5; }
+  .danger-zone { border-color: var(--neg); }
+  .btn-danger { color: var(--neg); border-color: var(--neg); background: var(--neg-bg); }
+  .btn-danger:hover { border-color: var(--neg); background: var(--neg); color: #180a08; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+  .modal-box { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 22px 24px; max-width: 420px; width: 100%; }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--neg); }
+  .modal-box p { margin: 0 0 20px; color: var(--ink-muted); font-size: 13.5px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+  .hold-delete-btn { position: relative; overflow: hidden; color: var(--neg); border-color: var(--neg); background: var(--neg-bg); user-select: none; }
+  .hold-delete-btn .hold-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--neg); opacity: 0.55; pointer-events: none; }
+  .hold-delete-btn .hold-label { position: relative; }
+
+  /* ---------------- Depth chart (estimated -- see disclaimer in the card) ---------------- */
+  .depth-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 780px) { .depth-chart-grid { grid-template-columns: 1fr; } }
+  .depth-pos-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; flex-wrap: wrap; }
+  .depth-pos-row:last-child { border-bottom: none; }
+  .depth-pos-label { width: 34px; flex-shrink: 0; color: var(--ink-muted); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+  .depth-player { padding: 2px 6px; border-radius: 4px; }
+  .depth-player.starter { color: var(--ink); font-weight: 600; }
+  .depth-player.backup { color: var(--ink-faint); }
+  .depth-player.inactive { color: var(--neg); text-decoration: line-through; }
+  .depth-player.clickable { cursor: pointer; }
+  .depth-player.clickable:hover { background: var(--panel-alt); text-decoration: underline; }
+  .usage-note { color: var(--ink-faint); font-size: 11px; }
+  .injury-tag { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: var(--neg-bg); color: var(--neg); margin-left: 4px; text-decoration: none; }
+
+  /* ---------------- Player stats modal ---------------- */
+  .player-modal-box { max-width: 560px; max-height: 82vh; overflow-y: auto; }
+  .player-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .player-modal-header h3 { margin: 0; color: var(--ink); font-size: 17px; }
+  .player-modal-sub { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: 14px; }
+  .player-stat-cat { margin-bottom: 16px; }
+  .player-stat-cat:last-child { margin-bottom: 0; }
+  .player-stat-cat h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+  .player-stat-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .player-stat-table td { padding: 4px 8px; border-bottom: 1px solid var(--rule); }
+  .player-stat-table td:first-child { color: var(--ink-muted); }
+  .player-stat-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 780px) {
+    .matchup-banner { flex-direction: column; }
+    .mb-a, .mb-b { flex-direction: row; justify-content: flex-start; text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="back-link" href="index.html">&larr; All sports</a>
+  <h1>Rob's Kalshi College Football Value Model</h1>
+  <p>Compares team strength (EPA/PPA, yardage, points, turnovers via CollegeFootballData.com) and estimated player usage against Kalshi's market-implied probability. FBS teams only.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="matchup-banner">
+    <div class="mb-side mb-a">
+      <div class="mb-name" id="mbNameA">Team A</div>
+      <img class="mb-logo" id="mbLogoA" alt="">
+    </div>
+    <div class="mb-vs">VS</div>
+    <div class="mb-side mb-b">
+      <img class="mb-logo" id="mbLogoB" alt="">
+      <div class="mb-name" id="mbNameB">Team B</div>
+    </div>
+  </div>
+
+  <!-- Kalshi market inputs -->
+  <div class="card">
+    <h2>Kalshi Market</h2>
+    <div class="market-grid">
+      <div>
+        <div class="field">
+          <label for="teamAName">Team A name (FBS school)</label>
+          <input type="text" id="teamAName" value="Georgia">
+        </div>
+        <div class="field">
+          <label for="priceA">Team A &ldquo;Yes&rdquo; price (&cent;, 1&ndash;99)</label>
+          <input type="number" id="priceA" min="1" max="99" step="1" value="55">
+        </div>
+      </div>
+      <div>
+        <div class="field">
+          <label for="teamBName">Team B name (FBS school)</label>
+          <input type="text" id="teamBName" value="Alabama">
+        </div>
+        <div class="field">
+          <label for="priceB">Team B &ldquo;Yes&rdquo; price (&cent;, optional)</label>
+          <input type="number" id="priceB" min="1" max="99" step="1" placeholder="leave blank = 100 &minus; A">
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px;">
+      <button type="button" class="btn" id="fetchBtn" onclick="fetchMatchup()">Fetch live data (both teams)</button>
+    </div>
+    <div class="fetch-status" id="fetchStatus"></div>
+  </div>
+
+  <!-- Team stat comparison -->
+  <div class="grid" style="margin-top:18px;">
+    <div class="card team-a">
+      <h2><span id="cardATitle">Team A &mdash; Season Stats</span></h2>
+      <div class="field"><label for="epaDiffA">EPA/PPA differential /play</label><input type="number" id="epaDiffA" step="0.01" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="pointsForA">Points for /gm</label><input type="number" id="pointsForA" step="0.1" value="28"></div>
+        <div class="field"><label for="pointsAgainstA">Points against /gm</label><input type="number" id="pointsAgainstA" step="0.1" value="24"></div>
+      </div>
+      <div class="field"><label for="turnoverMarginA">Turnover margin /gm</label><input type="number" id="turnoverMarginA" step="0.01" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="offPassEpaA">Off passing EPA/PPA</label><input type="number" id="offPassEpaA" step="0.01" value="0"></div>
+        <div class="field"><label for="defEpaAllowedA">Def EPA/PPA allowed</label><input type="number" id="defEpaAllowedA" step="0.01" value="0"></div>
+      </div>
+      <div class="field"><label for="yardsDiffA">Total yards diff /gm</label><input type="number" id="yardsDiffA" step="0.1" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="offRushEpaA">Off rush EPA/PPA</label><input type="number" id="offRushEpaA" step="0.01" value="0"></div>
+        <div class="field"><label for="offRushYardsA">Off rush yds /gm</label><input type="number" id="offRushYardsA" step="0.1" value="170"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="defRushYardsA">Def rush yds allowed /gm</label><input type="number" id="defRushYardsA" step="0.1" value="140"></div>
+        <div class="field"><label for="offTotalYardsA">Off total yds /gm</label><input type="number" id="offTotalYardsA" step="0.1" value="420"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="defTotalYardsA">Def total yds allowed /gm</label><input type="number" id="defTotalYardsA" step="0.1" value="360"></div>
+        <div class="field"><label for="defPassYardsA">Def pass yds allowed /gm</label><input type="number" id="defPassYardsA" step="0.1" value="220"></div>
+      </div>
+      <div class="field"><label for="offPassYardsA">Off pass yds /gm</label><input type="number" id="offPassYardsA" step="0.1" value="250"></div>
+    </div>
+
+    <div class="card team-b">
+      <h2><span id="cardBTitle">Team B &mdash; Season Stats</span></h2>
+      <div class="field"><label for="epaDiffB">EPA/PPA differential /play</label><input type="number" id="epaDiffB" step="0.01" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="pointsForB">Points for /gm</label><input type="number" id="pointsForB" step="0.1" value="28"></div>
+        <div class="field"><label for="pointsAgainstB">Points against /gm</label><input type="number" id="pointsAgainstB" step="0.1" value="24"></div>
+      </div>
+      <div class="field"><label for="turnoverMarginB">Turnover margin /gm</label><input type="number" id="turnoverMarginB" step="0.01" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="offPassEpaB">Off passing EPA/PPA</label><input type="number" id="offPassEpaB" step="0.01" value="0"></div>
+        <div class="field"><label for="defEpaAllowedB">Def EPA/PPA allowed</label><input type="number" id="defEpaAllowedB" step="0.01" value="0"></div>
+      </div>
+      <div class="field"><label for="yardsDiffB">Total yards diff /gm</label><input type="number" id="yardsDiffB" step="0.1" value="0"></div>
+      <div class="row2">
+        <div class="field"><label for="offRushEpaB">Off rush EPA/PPA</label><input type="number" id="offRushEpaB" step="0.01" value="0"></div>
+        <div class="field"><label for="offRushYardsB">Off rush yds /gm</label><input type="number" id="offRushYardsB" step="0.1" value="170"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="defRushYardsB">Def rush yds allowed /gm</label><input type="number" id="defRushYardsB" step="0.1" value="140"></div>
+        <div class="field"><label for="offTotalYardsB">Off total yds /gm</label><input type="number" id="offTotalYardsB" step="0.1" value="420"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="defTotalYardsB">Def total yds allowed /gm</label><input type="number" id="defTotalYardsB" step="0.1" value="360"></div>
+        <div class="field"><label for="defPassYardsB">Def pass yds allowed /gm</label><input type="number" id="defPassYardsB" step="0.1" value="220"></div>
+      </div>
+      <div class="field"><label for="offPassYardsB">Off pass yds /gm</label><input type="number" id="offPassYardsB" step="0.1" value="250"></div>
+    </div>
+  </div>
+
+  <!-- Depth chart (estimated) -->
+  <div class="card" style="margin-top:18px;">
+    <h2>Estimated Depth Chart &amp; Injuries</h2>
+    <div class="sample-note" style="margin-top:0; margin-bottom:12px;">No free source (ESPN included) publishes official college depth charts. This ranks players by real season production instead &mdash; play-involvement % for offense, tackle volume for defense &mdash; which is a legitimate but different signal than an official starter list. Offensive line isn't shown; no free source tracks individual line play for any level of football. Click a name to see their full season stats.</div>
+    <div class="fetch-status" id="depthChartStatus">Fetch live data above to load an estimated depth chart and injury designations.</div>
+    <div class="depth-chart-grid" id="depthChartGrid"></div>
+  </div>
+
+  <!-- Advanced settings -->
+  <details class="advanced">
+    <summary>Advanced &mdash; weights, league baselines, staking</summary>
+
+    <div class="adv-sub">Team composite weights (auto-normalized to sum to 1) &mdash; starting point mirrors the NFL model's emphasis (EPA differential weighted strongest); not yet backtested specifically for college the way the baseball/NFL weights were.</div>
+    <div class="adv-grid">
+      <div class="field"><label for="wEpaDiff">EPA/PPA differential</label><input type="number" id="wEpaDiff" step="0.5" value="3"></div>
+      <div class="field"><label for="wPointsFor">Points for</label><input type="number" id="wPointsFor" step="0.5" value="2"></div>
+      <div class="field"><label for="wPointsAgainst">Points against</label><input type="number" id="wPointsAgainst" step="0.5" value="2"></div>
+      <div class="field"><label for="wTurnoverMargin">Turnover margin</label><input type="number" id="wTurnoverMargin" step="0.5" value="2"></div>
+      <div class="field"><label for="wOffPassEpa">Off passing EPA/PPA</label><input type="number" id="wOffPassEpa" step="0.5" value="2"></div>
+      <div class="field"><label for="wDefEpaAllowed">Def EPA/PPA allowed</label><input type="number" id="wDefEpaAllowed" step="0.5" value="2"></div>
+      <div class="field"><label for="wYardsDiff">Total yards diff</label><input type="number" id="wYardsDiff" step="0.5" value="2"></div>
+      <div class="field"><label for="wOffRushEpa">Off rush EPA/PPA</label><input type="number" id="wOffRushEpa" step="0.5" value="1"></div>
+      <div class="field"><label for="wOffRushYards">Off rush yards</label><input type="number" id="wOffRushYards" step="0.5" value="2"></div>
+      <div class="field"><label for="wDefRushYards">Def rush yards allowed</label><input type="number" id="wDefRushYards" step="0.5" value="2"></div>
+      <div class="field"><label for="wOffTotalYards">Off total yards</label><input type="number" id="wOffTotalYards" step="0.5" value="1"></div>
+      <div class="field"><label for="wDefTotalYards">Def total yards allowed</label><input type="number" id="wDefTotalYards" step="0.5" value="1"></div>
+      <div class="field"><label for="wDefPassYards">Def pass yards allowed</label><input type="number" id="wDefPassYards" step="0.5" value="1"></div>
+      <div class="field"><label for="wOffPassYards">Off pass yards</label><input type="number" id="wOffPassYards" step="0.5" value="1"></div>
+    </div>
+
+    <div class="adv-sub">League baselines (mean / standard deviation used for z-scores, per game unless noted) &mdash; wider spreads than the NFL model's since the FBS pool spans blue-bloods to bottom-tier programs.</div>
+    <div class="adv-grid">
+      <div class="field"><label for="epaDiffMean">EPA/PPA diff mean</label><input type="number" id="epaDiffMean" step="0.01" value="0"></div>
+      <div class="field"><label for="epaDiffSd">EPA/PPA diff SD</label><input type="number" id="epaDiffSd" step="0.01" value="0.18"></div>
+      <div class="field"><label for="pointsForMean">Points for mean</label><input type="number" id="pointsForMean" step="0.1" value="28.5"></div>
+      <div class="field"><label for="pointsForSd">Points for SD</label><input type="number" id="pointsForSd" step="0.1" value="8.0"></div>
+      <div class="field"><label for="pointsAgainstMean">Points against mean</label><input type="number" id="pointsAgainstMean" step="0.1" value="28.5"></div>
+      <div class="field"><label for="pointsAgainstSd">Points against SD</label><input type="number" id="pointsAgainstSd" step="0.1" value="8.0"></div>
+      <div class="field"><label for="turnoverMarginSd">Turnover margin SD</label><input type="number" id="turnoverMarginSd" step="0.01" value="0.7"></div>
+      <div class="field"><label for="offPassEpaMean">Off pass EPA/PPA mean</label><input type="number" id="offPassEpaMean" step="0.01" value="0.1"></div>
+      <div class="field"><label for="offPassEpaSd">Off pass EPA/PPA SD</label><input type="number" id="offPassEpaSd" step="0.01" value="0.2"></div>
+      <div class="field"><label for="defEpaAllowedMean">Def EPA/PPA allowed mean</label><input type="number" id="defEpaAllowedMean" step="0.01" value="0.05"></div>
+      <div class="field"><label for="defEpaAllowedSd">Def EPA/PPA allowed SD</label><input type="number" id="defEpaAllowedSd" step="0.01" value="0.18"></div>
+      <div class="field"><label for="yardsDiffMean">Yards diff mean</label><input type="number" id="yardsDiffMean" step="0.1" value="0"></div>
+      <div class="field"><label for="yardsDiffSd">Yards diff SD</label><input type="number" id="yardsDiffSd" step="0.1" value="90"></div>
+      <div class="field"><label for="offRushEpaMean">Off rush EPA/PPA mean</label><input type="number" id="offRushEpaMean" step="0.01" value="0.05"></div>
+      <div class="field"><label for="offRushEpaSd">Off rush EPA/PPA SD</label><input type="number" id="offRushEpaSd" step="0.01" value="0.15"></div>
+      <div class="field"><label for="offRushYardsMean">Off rush yards mean</label><input type="number" id="offRushYardsMean" step="0.1" value="170"></div>
+      <div class="field"><label for="offRushYardsSd">Off rush yards SD</label><input type="number" id="offRushYardsSd" step="0.1" value="55"></div>
+      <div class="field"><label for="defRushYardsMean">Def rush yds allowed mean</label><input type="number" id="defRushYardsMean" step="0.1" value="170"></div>
+      <div class="field"><label for="defRushYardsSd">Def rush yds allowed SD</label><input type="number" id="defRushYardsSd" step="0.1" value="55"></div>
+      <div class="field"><label for="offTotalYardsMean">Off total yds mean</label><input type="number" id="offTotalYardsMean" step="0.1" value="420"></div>
+      <div class="field"><label for="offTotalYardsSd">Off total yds SD</label><input type="number" id="offTotalYardsSd" step="0.1" value="75"></div>
+      <div class="field"><label for="defTotalYardsMean">Def total yds allowed mean</label><input type="number" id="defTotalYardsMean" step="0.1" value="420"></div>
+      <div class="field"><label for="defTotalYardsSd">Def total yds allowed SD</label><input type="number" id="defTotalYardsSd" step="0.1" value="75"></div>
+      <div class="field"><label for="defPassYardsMean">Def pass yds allowed mean</label><input type="number" id="defPassYardsMean" step="0.1" value="250"></div>
+      <div class="field"><label for="defPassYardsSd">Def pass yds allowed SD</label><input type="number" id="defPassYardsSd" step="0.1" value="50"></div>
+      <div class="field"><label for="offPassYardsMean">Off pass yds mean</label><input type="number" id="offPassYardsMean" step="0.1" value="250"></div>
+      <div class="field"><label for="offPassYardsSd">Off pass yds SD</label><input type="number" id="offPassYardsSd" step="0.1" value="50"></div>
+      <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="5.0"></div>
+    </div>
+
+    <div class="adv-sub">Staking</div>
+    <div class="adv-grid">
+      <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.15"></div>
+      <div class="field"><label for="bankroll">Bankroll ($)</label><input type="number" id="bankroll" step="10" value="100"></div>
+      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
+    </div>
+  </details>
+
+  <!-- Results -->
+  <div class="results" style="margin-top:22px;">
+    <div class="rec-banner" id="recBanner">
+      <div>
+        <div class="rec-label">Recommendation</div>
+        <div class="rec-main" id="recMain">&mdash;</div>
+      </div>
+      <div class="rec-edge" id="recEdgeVal">&mdash;</div>
+    </div>
+
+    <div class="compare-grid">
+      <div class="team-result">
+        <h3 id="resATitle">Team A</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Model probability</span><span class="val" id="modelAVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill model" id="modelABar" style="width:0%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"><span>Market (de-vigged)</span><span class="val" id="marketAVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill market" id="marketABar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="team-result">
+        <h3 id="resBTitle">Team B</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>Model probability</span><span class="val" id="modelBVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill model" id="modelBBar" style="width:0%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"><span>Market (de-vigged)</span><span class="val" id="marketBVal">&mdash;</span></div>
+          <div class="bar-track"><div class="bar-fill market" id="marketBBar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="m-label">Edge (best side)</div><div class="m-val" id="edgeVal">&mdash;</div><div class="m-sub">model &minus; market, percentage points</div></div>
+      <div class="metric"><div class="m-label">EV per $1 contract</div><div class="m-val" id="evVal">&mdash;</div><div class="m-sub" id="evSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Suggested stake</div><div class="m-val" id="kellyVal">&mdash;</div><div class="m-sub" id="kellySub">&mdash;</div></div>
+    </div>
+  </div>
+
+  <!-- Trade log -->
+  <div class="card" style="margin-top:22px;">
+    <h2>Trade Log</h2>
+    <div class="log-controls">
+      <div class="field">
+        <label for="betAmount">Bet amount ($)</label>
+        <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
+      </div>
+      <button type="button" class="btn" onclick="logCurrentTrade()">Log this trade</button>
+      <button type="button" class="btn" onclick="exportLog()">Export .json</button>
+      <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
+      <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
+    </div>
+    <div class="log-summary" id="logSummary">No trades logged yet.</div>
+    <div class="log-scroll" style="margin-top:12px;">
+      <table class="log-table">
+        <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge</th><th>Stake</th><th>To Win</th><th>Result</th><th>P/L</th><th></th></tr></thead>
+        <tbody id="logTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Matchup data & analysis -->
+  <div class="card" style="margin-top:22px;" id="dataCard">
+    <h2>Matchup Data &amp; Analysis</h2>
+    <div class="log-controls">
+      <button type="button" class="btn" onclick="recordMatchup()">Record this matchup</button>
+      <button type="button" class="btn" onclick="refreshMatchupResults()" id="refreshMatchupBtn">Fetch results for pending games</button>
+      <button type="button" class="btn" onclick="exportMatchupData()">Export .json</button>
+      <button type="button" class="btn" onclick="document.getElementById('importMatchupFile').click()">Import .json</button>
+      <input type="file" id="importMatchupFile" accept="application/json" class="hidden" onchange="importMatchupData(event)">
+    </div>
+    <div class="fetch-status" style="margin-bottom:10px;">Snapshots every team stat currently on screen for both teams, so you can check later which ones actually tracked the winner. Set the Result manually, or fetch it automatically once the game's final.</div>
+    <div class="fetch-status" id="refreshMatchupStatus" style="margin-bottom:10px;"></div>
+    <div class="log-summary" id="matchupDataSummary">No matchups recorded yet.</div>
+    <div class="log-scroll" style="margin-top:12px; max-height:500px;">
+      <table class="log-table">
+        <thead><tr><th>Date</th><th>Matchup</th><th>Model pick</th><th>Market pick</th><th>Result</th><th></th></tr></thead>
+        <tbody id="matchupDataTbody"></tbody>
+      </table>
+    </div>
+
+    <div class="adv-sub" style="margin-top:22px;">Recommendation performance (settled matchups only)</div>
+    <div class="metrics" style="margin-top:0;">
+      <div class="metric"><div class="m-label">Recommendation win rate</div><div class="m-val" id="recWinRateVal">&mdash;</div><div class="m-sub" id="recWinRateSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Avg edge &mdash; wins</div><div class="m-val" id="avgEdgeWinVal">&mdash;</div><div class="m-sub" id="avgEdgeWinSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Avg edge &mdash; losses</div><div class="m-val" id="avgEdgeLossVal">&mdash;</div><div class="m-sub" id="avgEdgeLossSub">&mdash;</div></div>
+    </div>
+
+    <div class="adv-sub" style="margin-top:22px;">Stat accuracy (settled matchups only)</div>
+    <div style="overflow-x:auto;">
+      <table class="log-table">
+        <thead><tr><th>Stat</th><th>Accuracy</th><th>Sample</th></tr></thead>
+        <tbody id="statAccuracyTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card danger-zone" style="margin-top:22px;">
+    <h2 style="color:var(--neg);">Danger Zone</h2>
+    <div class="fetch-status" style="margin-bottom:10px;">Permanently deletes the trade log and matchup data for this model from this browser's storage. This cannot be undone.</div>
+    <button type="button" class="btn btn-danger" onclick="openClearDataModal()">Clear All Data&hellip;</button>
+  </div>
+
+  <div class="modal-overlay hidden" id="clearDataModal">
+    <div class="modal-box">
+      <h3>Delete all college football trade log and matchup data?</h3>
+      <p>This permanently erases every logged trade and recorded matchup for this model. There is no undo.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeClearDataModal()">No, cancel</button>
+        <button type="button" class="btn hold-delete-btn" id="holdDeleteBtn">
+          <span class="hold-fill" id="holdFill"></span>
+          <span class="hold-label">Hold to delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="playerStatsModal">
+    <div class="modal-box player-modal-box">
+      <div class="player-modal-header">
+        <h3 id="playerStatsName">Player</h3>
+      </div>
+      <div class="player-modal-sub" id="playerStatsPos">&mdash;</div>
+      <div id="playerStatsBody">Loading&hellip;</div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="btn" onclick="closePlayerStatsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="college-football.js"></script>
+</body>
+</html>
