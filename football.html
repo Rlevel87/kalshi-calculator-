@@ -34,6 +34,33 @@
   .num, input, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; }
   ::selection { background: var(--accent); color: #071013; }
 
+  /* Full-page split background -- left half tints toward the away/left team's own color with
+     their logo watermarked large and faint behind everything; right half mirrors it for the
+     right team. Fixed behind all content, so it only ever shows in the margins around the
+     (still fully opaque, unaffected) cards -- readability of anything on a card is untouched.
+     Colors come from --team-a-color/--team-b-color, set from each team's real ESPN hex once
+     resolved (applyTeamBadge); the defaults below (--accent/--neutral, in the :root block)
+     just give the empty pre-selection state a themed look instead of flat black. */
+  .team-bg { position: fixed; inset: 0; z-index: -1; display: flex; }
+  .team-bg-half {
+    flex: 1; position: relative; overflow: hidden;
+    transition: background 0.5s ease;
+  }
+  .team-bg-half.a { background: linear-gradient(115deg, color-mix(in srgb, var(--team-a-color) 30%, var(--bg)) 0%, var(--bg) 62%); }
+  .team-bg-half.b { background: linear-gradient(245deg, color-mix(in srgb, var(--team-b-color) 30%, var(--bg)) 0%, var(--bg) 62%); }
+  .team-bg-logo {
+    position: absolute; top: 50%; width: 62%; max-width: 460px; object-fit: contain;
+    opacity: 0; transform: translateY(-50%); transition: opacity 0.5s ease;
+  }
+  .team-bg-logo.loaded { opacity: 0.16; }
+  .team-bg-half.a .team-bg-logo { left: -10%; }
+  .team-bg-half.b .team-bg-logo { right: -10%; }
+  @media (max-width: 780px) {
+    .team-bg { flex-direction: column; }
+    .team-bg-half.a { background: linear-gradient(160deg, color-mix(in srgb, var(--team-a-color) 26%, var(--bg)) 0%, var(--bg) 55%); }
+    .team-bg-half.b { background: linear-gradient(340deg, color-mix(in srgb, var(--team-b-color) 26%, var(--bg)) 0%, var(--bg) 55%); }
+  }
+
   header { padding: 22px 16px 16px; border-bottom: 1px solid var(--rule); background: var(--panel-alt); }
   .back-link { display: inline-block; font-size: 12.5px; color: var(--ink-muted); text-decoration: none; margin-bottom: 10px; }
   .back-link:hover { color: var(--accent); }
@@ -189,6 +216,11 @@
 </style>
 </head>
 <body>
+
+<div class="team-bg" aria-hidden="true">
+  <div class="team-bg-half a"><img class="team-bg-logo" id="teamBgLogoA" alt=""></div>
+  <div class="team-bg-half b"><img class="team-bg-logo" id="teamBgLogoB" alt=""></div>
+</div>
 
 <header>
   <a class="back-link" href="index.html">&larr; All sports</a>

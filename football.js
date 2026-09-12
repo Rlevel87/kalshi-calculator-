@@ -95,13 +95,32 @@ function findTeam(query, teams) {
     t.displayName.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) ||
     (t.location || '').toLowerCase().includes(q)) || null;
 }
+// Prefers the "dark" logo rendition ESPN publishes for most teams (meant for exactly this --
+// a dark background) over the plain/default one, which sometimes has thin dark outlines that
+// all but disappear on this page's own dark background.
+function teamLogoUrl(team) {
+  const logos = team.logos || [];
+  const dark = logos.find(function (l) { return l.rel && l.rel.indexOf('dark') !== -1; });
+  return (dark || logos[0] || {}).href || '';
+}
 function applyTeamBadge(side, team) {
   $('mbName' + side).textContent = team.displayName;
   const logo = $('mbLogo' + side);
   logo.classList.remove('loaded');
   logo.onload = function () { logo.classList.add('loaded'); };
   logo.onerror = function () { logo.classList.remove('loaded'); };
-  logo.src = team.logos && team.logos[0] ? team.logos[0].href : '';
+  logo.src = teamLogoUrl(team);
+
+  // Full-page split background (see .team-bg in football.html) -- tints that side toward the
+  // team's real color and watermarks their logo, once resolved.
+  document.documentElement.style.setProperty('--team-' + side.toLowerCase() + '-color', '#' + (team.color || (side === 'A' ? '4fb0c6' : 'c9a24b')));
+  const bgLogo = $('teamBgLogo' + side);
+  if (bgLogo) {
+    bgLogo.classList.remove('loaded');
+    bgLogo.onload = function () { bgLogo.classList.add('loaded'); };
+    bgLogo.onerror = function () { bgLogo.classList.remove('loaded'); };
+    bgLogo.src = teamLogoUrl(team);
+  }
   logo.alt = team.displayName + ' logo';
 }
 async function resolveAndBadge(side) {
