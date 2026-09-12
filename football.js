@@ -449,11 +449,22 @@ function applyTeamSummaryToInputs(side, s) {
   $('defTotalYards' + side).value = fmtNum(s.defTotalYardsAllowed, 1);
   $('defPassYards' + side).value = fmtNum(s.defPassYardsAllowed, 1);
   $('offPassYards' + side).value = fmtNum(s.offPassingYards, 1);
+  $('passingCpoe' + side).value = fmtNum(s.passingCpoe, 3);
+  $('puntAttempts' + side).value = fmtNum(s.puntAttempts, 2);
+  $('sacksSuffered' + side).value = fmtNum(s.sacksSuffered, 2);
+  $('defQbHits' + side).value = fmtNum(s.defQbHits, 2);
 }
 
 /* ---------------------------- team composite (Team Strength Index) + recalc ---------------------------- */
+// Weight defaults for every one of these (see the "w<Key>" inputs in the Advanced panel) are set
+// directly from real correlation-with-win magnitudes measured across 2021-2024
+// (nfl_game_predictor_pipeline.py, Documents\Python files) -- not hand-picked. PassingCpoe,
+// PuntAttempts, SacksSuffered, and DefQbHits are the four genuinely new, non-redundant signals
+// that sweep surfaced (SacksSuffered was already being fetched from nflverse but had never
+// actually been wired into the model or the UI until now).
 const TSI_KEYS = ['EpaDiff', 'PointsFor', 'PointsAgainst', 'TurnoverMargin', 'OffPassEpa', 'DefEpaAllowed',
-  'YardsDiff', 'OffRushEpa', 'OffRushYards', 'DefRushYards', 'OffTotalYards', 'DefTotalYards', 'DefPassYards', 'OffPassYards'];
+  'YardsDiff', 'OffRushEpa', 'OffRushYards', 'DefRushYards', 'OffTotalYards', 'DefTotalYards', 'DefPassYards', 'OffPassYards',
+  'PassingCpoe', 'PuntAttempts', 'SacksSuffered', 'DefQbHits'];
 
 // Returns { total, contributions } -- contributions holds each term's actual weighted
 // contribution (weight * z-score) to this team's TSI, keyed the same as the weights object.
@@ -476,6 +487,10 @@ function compositeTSI(side, w, base) {
   const zDefTotalYards = -z(g('defTotalYards'), base.defTotalYardsMean, base.defTotalYardsSd);
   const zDefPassYards = -z(g('defPassYards'), base.defPassYardsMean, base.defPassYardsSd);
   const zOffPassYards = z(g('offPassYards'), base.offPassYardsMean, base.offPassYardsSd);
+  const zPassingCpoe = z(g('passingCpoe'), base.passingCpoeMean, base.passingCpoeSd);
+  const zPuntAttempts = -z(g('puntAttempts'), base.puntAttemptsMean, base.puntAttemptsSd); // more punts = worse offense
+  const zSacksSuffered = -z(g('sacksSuffered'), base.sacksSufferedMean, base.sacksSufferedSd);
+  const zDefQbHits = z(g('defQbHits'), base.defQbHitsMean, base.defQbHitsSd);
 
   const contributions = {
     EpaDiff: w.EpaDiff * zEpaDiff,
@@ -491,7 +506,11 @@ function compositeTSI(side, w, base) {
     OffTotalYards: w.OffTotalYards * zOffTotalYards,
     DefTotalYards: w.DefTotalYards * zDefTotalYards,
     DefPassYards: w.DefPassYards * zDefPassYards,
-    OffPassYards: w.OffPassYards * zOffPassYards
+    OffPassYards: w.OffPassYards * zOffPassYards,
+    PassingCpoe: w.PassingCpoe * zPassingCpoe,
+    PuntAttempts: w.PuntAttempts * zPuntAttempts,
+    SacksSuffered: w.SacksSuffered * zSacksSuffered,
+    DefQbHits: w.DefQbHits * zDefQbHits
   };
   let total = 0;
   Object.keys(contributions).forEach(function (k) { total += contributions[k]; });
@@ -528,6 +547,10 @@ function renderContribBadges(side, c) {
   paintContribBadge('contribDefTotalYards' + side, c.DefTotalYards);
   paintContribBadge('contribDefPassYards' + side, c.DefPassYards);
   paintContribBadge('contribOffPassYards' + side, c.OffPassYards);
+  paintContribBadge('contribPassingCpoe' + side, c.PassingCpoe);
+  paintContribBadge('contribPuntAttempts' + side, c.PuntAttempts);
+  paintContribBadge('contribSacksSuffered' + side, c.SacksSuffered);
+  paintContribBadge('contribDefQbHits' + side, c.DefQbHits);
 }
 
 function recalc() {
@@ -543,7 +566,8 @@ function recalc() {
     'offPassEpaMean', 'offPassEpaSd', 'defEpaAllowedMean', 'defEpaAllowedSd', 'yardsDiffMean', 'yardsDiffSd',
     'offRushEpaMean', 'offRushEpaSd', 'offRushYardsMean', 'offRushYardsSd', 'defRushYardsMean', 'defRushYardsSd',
     'offTotalYardsMean', 'offTotalYardsSd', 'defTotalYardsMean', 'defTotalYardsSd', 'defPassYardsMean', 'defPassYardsSd',
-    'offPassYardsMean', 'offPassYardsSd'].forEach(function (k) { base[k] = val(k); });
+    'offPassYardsMean', 'offPassYardsSd', 'passingCpoeMean', 'passingCpoeSd', 'puntAttemptsMean', 'puntAttemptsSd',
+    'sacksSufferedMean', 'sacksSufferedSd', 'defQbHitsMean', 'defQbHitsSd'].forEach(function (k) { base[k] = val(k); });
   const scale = val('scale');
 
   const resultA = compositeTSI('A', w, base);
@@ -718,7 +742,8 @@ function renderLog() {
 const MATCHUP_DATA_KEY = 'kalshiNflMatchupData';
 const TRACKED_STATS = TSI_KEYS.map(function (k) {
   const key = k.charAt(0).toLowerCase() + k.slice(1);
-  const lowerIsBetter = k === 'PointsAgainst' || k === 'DefEpaAllowed' || k === 'DefRushYards' || k === 'DefTotalYards' || k === 'DefPassYards';
+  const lowerIsBetter = k === 'PointsAgainst' || k === 'DefEpaAllowed' || k === 'DefRushYards' || k === 'DefTotalYards' || k === 'DefPassYards' ||
+    k === 'PuntAttempts' || k === 'SacksSuffered';
   return { key: key, label: k.replace(/([A-Z])/g, ' $1').trim(), higherBetter: !lowerIsBetter };
 }).concat([{ key: 'model', label: 'Model probability', higherBetter: true }, { key: 'market', label: 'Market probability', higherBetter: true }]);
 

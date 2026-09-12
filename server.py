@@ -212,6 +212,9 @@ def _compute_team_summary(team, season):
     giveaways = sum(_num(r, 'passing_interceptions') + _num(r, 'fumbles_lost_total') for r in own_rows)
     takeaways = sum(_num(r, 'def_interceptions') + _num(r, 'fumble_recovery_opp') for r in own_rows)
     sacks_suffered = sum(_num(r, 'sacks_suffered') for r in own_rows)  # own O-line's pass-block proxy
+    passing_cpoe = sum(_num(r, 'passing_cpoe') for r in own_rows)  # completion % over expected -- QB accuracy, distinct signal from raw EPA/yards
+    punt_attempts = sum(_num(r, 'pt_att') for r in own_rows)  # bad-offense proxy -- correlates with losing even more strongly than turnover margin
+    def_qb_hits = sum(_num(r, 'def_qb_hits') for r in own_rows)  # pass-rush pressure, own defense generating it (distinct from sacks_suffered, which is this team's OWN offense getting hit)
 
     def_pass_yards_allowed = sum(_num(r, 'passing_yards') for r in opp_rows)
     def_rush_yards_allowed = sum(_num(r, 'rushing_yards') for r in opp_rows)
@@ -249,6 +252,9 @@ def _compute_team_summary(team, season):
         'defPassYardsAllowed': per_game(def_pass_yards_allowed),
         'offPassingYards': per_game(off_pass_yards),
         'sacksSuffered': per_game(sacks_suffered),  # O-line pass-block proxy -- lower is better
+        'passingCpoe': per_game(passing_cpoe),
+        'puntAttempts': per_game(punt_attempts),  # bad-offense proxy -- lower is better
+        'defQbHits': per_game(def_qb_hits),
     }
 
 

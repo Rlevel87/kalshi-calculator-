@@ -308,6 +308,14 @@
         <div class="field"><label for="defPassYardsA">Def pass yds allowed /gm <span class="stat-contrib" id="contribDefPassYardsA"></span></label><input type="number" id="defPassYardsA" step="0.1" value="220"></div>
       </div>
       <div class="field"><label for="offPassYardsA">Off pass yds /gm <span class="stat-contrib" id="contribOffPassYardsA"></span></label><input type="number" id="offPassYardsA" step="0.1" value="220"></div>
+      <div class="row2">
+        <div class="field"><label for="passingCpoeA">Passing CPOE /gm <span class="stat-contrib" id="contribPassingCpoeA"></span></label><input type="number" id="passingCpoeA" step="0.1" value="0.8"></div>
+        <div class="field"><label for="puntAttemptsA">Punt attempts /gm <span class="stat-contrib" id="contribPuntAttemptsA"></span></label><input type="number" id="puntAttemptsA" step="0.1" value="3.9"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="sacksSufferedA">Sacks suffered /gm <span class="stat-contrib" id="contribSacksSufferedA"></span></label><input type="number" id="sacksSufferedA" step="0.1" value="2.4"></div>
+        <div class="field"><label for="defQbHitsA">Def QB hits /gm <span class="stat-contrib" id="contribDefQbHitsA"></span></label><input type="number" id="defQbHitsA" step="0.1" value="5.7"></div>
+      </div>
     </div>
 
     <div class="card team-b">
@@ -336,6 +344,14 @@
         <div class="field"><label for="defPassYardsB">Def pass yds allowed /gm <span class="stat-contrib" id="contribDefPassYardsB"></span></label><input type="number" id="defPassYardsB" step="0.1" value="220"></div>
       </div>
       <div class="field"><label for="offPassYardsB">Off pass yds /gm <span class="stat-contrib" id="contribOffPassYardsB"></span></label><input type="number" id="offPassYardsB" step="0.1" value="220"></div>
+      <div class="row2">
+        <div class="field"><label for="passingCpoeB">Passing CPOE /gm <span class="stat-contrib" id="contribPassingCpoeB"></span></label><input type="number" id="passingCpoeB" step="0.1" value="0.8"></div>
+        <div class="field"><label for="puntAttemptsB">Punt attempts /gm <span class="stat-contrib" id="contribPuntAttemptsB"></span></label><input type="number" id="puntAttemptsB" step="0.1" value="3.9"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="sacksSufferedB">Sacks suffered /gm <span class="stat-contrib" id="contribSacksSufferedB"></span></label><input type="number" id="sacksSufferedB" step="0.1" value="2.4"></div>
+        <div class="field"><label for="defQbHitsB">Def QB hits /gm <span class="stat-contrib" id="contribDefQbHitsB"></span></label><input type="number" id="defQbHitsB" step="0.1" value="5.7"></div>
+      </div>
     </div>
   </div>
 
@@ -350,22 +366,28 @@
   <details class="advanced">
     <summary>Advanced &mdash; weights, league baselines, staking</summary>
 
-    <div class="adv-sub">Team composite weights (auto-normalized to sum to 1)</div>
+    <div class="adv-sub">Team composite weights (auto-normalized to sum to 1) &mdash; defaults set directly from each
+      stat's real correlation with winning, measured across 2021-2024 (nfl_game_predictor_pipeline.py in
+      Documents\Python files -- rerun it and update these as more seasons come in)</div>
     <div class="adv-grid">
-      <div class="field"><label for="wEpaDiff">EPA differential</label><input type="number" id="wEpaDiff" step="0.5" value="3"></div>
-      <div class="field"><label for="wPointsFor">Points for</label><input type="number" id="wPointsFor" step="0.5" value="2"></div>
-      <div class="field"><label for="wPointsAgainst">Points against</label><input type="number" id="wPointsAgainst" step="0.5" value="2"></div>
-      <div class="field"><label for="wTurnoverMargin">Turnover margin</label><input type="number" id="wTurnoverMargin" step="0.5" value="2"></div>
-      <div class="field"><label for="wOffPassEpa">Off passing EPA</label><input type="number" id="wOffPassEpa" step="0.5" value="2"></div>
-      <div class="field"><label for="wDefEpaAllowed">Def EPA allowed</label><input type="number" id="wDefEpaAllowed" step="0.5" value="2"></div>
-      <div class="field"><label for="wYardsDiff">Total yards diff</label><input type="number" id="wYardsDiff" step="0.5" value="2"></div>
-      <div class="field"><label for="wOffRushEpa">Off rush EPA</label><input type="number" id="wOffRushEpa" step="0.5" value="1"></div>
-      <div class="field"><label for="wOffRushYards">Off rush yards</label><input type="number" id="wOffRushYards" step="0.5" value="2"></div>
-      <div class="field"><label for="wDefRushYards">Def rush yards allowed</label><input type="number" id="wDefRushYards" step="0.5" value="2"></div>
-      <div class="field"><label for="wOffTotalYards">Off total yards</label><input type="number" id="wOffTotalYards" step="0.5" value="1"></div>
-      <div class="field"><label for="wDefTotalYards">Def total yards allowed</label><input type="number" id="wDefTotalYards" step="0.5" value="1"></div>
-      <div class="field"><label for="wDefPassYards">Def pass yards allowed</label><input type="number" id="wDefPassYards" step="0.5" value="1"></div>
-      <div class="field"><label for="wOffPassYards">Off pass yards</label><input type="number" id="wOffPassYards" step="0.5" value="1"></div>
+      <div class="field"><label for="wEpaDiff">EPA differential</label><input type="number" id="wEpaDiff" step="0.001" value="0.185"></div>
+      <div class="field"><label for="wPointsFor">Points for</label><input type="number" id="wPointsFor" step="0.001" value="0.194"></div>
+      <div class="field"><label for="wPointsAgainst">Points against</label><input type="number" id="wPointsAgainst" step="0.001" value="0.077"></div>
+      <div class="field"><label for="wTurnoverMargin">Turnover margin</label><input type="number" id="wTurnoverMargin" step="0.001" value="0.096"></div>
+      <div class="field"><label for="wOffPassEpa">Off passing EPA</label><input type="number" id="wOffPassEpa" step="0.001" value="0.187"></div>
+      <div class="field"><label for="wDefEpaAllowed">Def EPA allowed</label><input type="number" id="wDefEpaAllowed" step="0.001" value="0.050"></div>
+      <div class="field"><label for="wYardsDiff">Total yards diff</label><input type="number" id="wYardsDiff" step="0.001" value="0.152"></div>
+      <div class="field"><label for="wOffRushEpa">Off rush EPA</label><input type="number" id="wOffRushEpa" step="0.001" value="0.112"></div>
+      <div class="field"><label for="wOffRushYards">Off rush yards</label><input type="number" id="wOffRushYards" step="0.001" value="0.076"></div>
+      <div class="field"><label for="wDefRushYards">Def rush yards allowed</label><input type="number" id="wDefRushYards" step="0.001" value="0.111"></div>
+      <div class="field"><label for="wOffTotalYards">Off total yards</label><input type="number" id="wOffTotalYards" step="0.001" value="0.190"></div>
+      <div class="field"><label for="wDefTotalYards">Def total yards allowed</label><input type="number" id="wDefTotalYards" step="0.001" value="0.023"></div>
+      <div class="field"><label for="wDefPassYards">Def pass yards allowed</label><input type="number" id="wDefPassYards" step="0.001" value="0.050"></div>
+      <div class="field"><label for="wOffPassYards">Off pass yards</label><input type="number" id="wOffPassYards" step="0.001" value="0.153"></div>
+      <div class="field"><label for="wPassingCpoe">Passing CPOE</label><input type="number" id="wPassingCpoe" step="0.001" value="0.149"></div>
+      <div class="field"><label for="wPuntAttempts">Punt attempts</label><input type="number" id="wPuntAttempts" step="0.001" value="0.176"></div>
+      <div class="field"><label for="wSacksSuffered">Sacks suffered</label><input type="number" id="wSacksSuffered" step="0.001" value="0.128"></div>
+      <div class="field"><label for="wDefQbHits">Def QB hits</label><input type="number" id="wDefQbHits" step="0.001" value="0.108"></div>
     </div>
 
     <div class="adv-sub">League baselines (mean / standard deviation used for z-scores, per game)</div>
@@ -397,6 +419,14 @@
       <div class="field"><label for="defPassYardsSd">Def pass yds allowed SD</label><input type="number" id="defPassYardsSd" step="0.1" value="35"></div>
       <div class="field"><label for="offPassYardsMean">Off pass yds mean</label><input type="number" id="offPassYardsMean" step="0.1" value="220"></div>
       <div class="field"><label for="offPassYardsSd">Off pass yds SD</label><input type="number" id="offPassYardsSd" step="0.1" value="35"></div>
+      <div class="field"><label for="passingCpoeMean">Passing CPOE mean</label><input type="number" id="passingCpoeMean" step="0.01" value="0.76"></div>
+      <div class="field"><label for="passingCpoeSd">Passing CPOE SD</label><input type="number" id="passingCpoeSd" step="0.01" value="3.88"></div>
+      <div class="field"><label for="puntAttemptsMean">Punt attempts mean</label><input type="number" id="puntAttemptsMean" step="0.01" value="3.93"></div>
+      <div class="field"><label for="puntAttemptsSd">Punt attempts SD</label><input type="number" id="puntAttemptsSd" step="0.01" value="0.87"></div>
+      <div class="field"><label for="sacksSufferedMean">Sacks suffered mean</label><input type="number" id="sacksSufferedMean" step="0.01" value="2.45"></div>
+      <div class="field"><label for="sacksSufferedSd">Sacks suffered SD</label><input type="number" id="sacksSufferedSd" step="0.01" value="0.82"></div>
+      <div class="field"><label for="defQbHitsMean">Def QB hits mean</label><input type="number" id="defQbHitsMean" step="0.01" value="5.75"></div>
+      <div class="field"><label for="defQbHitsSd">Def QB hits SD</label><input type="number" id="defQbHitsSd" step="0.01" value="1.23"></div>
       <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="5.0"></div>
     </div>
 
