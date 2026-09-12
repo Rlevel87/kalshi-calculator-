@@ -489,10 +489,12 @@
         <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
       </div>
       <button type="button" class="btn" onclick="logCurrentTrade()">Log this trade</button>
+      <button type="button" class="btn" onclick="fetchTradeResults()">Fetch results</button>
       <button type="button" class="btn" onclick="exportLog()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
     </div>
+    <div class="fetch-status" id="fetchResultsStatus"></div>
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
     <div class="log-scroll" style="margin-top:12px;">
       <table class="log-table">

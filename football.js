@@ -685,6 +685,62 @@ function importLog(event) {
   reader.readAsText(file);
   event.target.value = '';
 }
+// Looks up whether one logged trade's game has actually been played yet, and if so who won --
+// ESPN's scoreboard reports each competitor by the same full team display name ("Seattle
+// Seahawks") already stored in matchup/side, so no abbreviation lookup is needed, just a direct
+// string match. Searches a +/-3 day window around the date the trade was LOGGED (not
+// necessarily game day itself -- a trade logged the day before kickoff is common) rather than
+// requiring an exact date or NFL week number.
+async function fetchGameResultForTrade(entry) {
+  const names = entry.matchup.split(' vs ');
+  if (names.length !== 2) return null;
+  const logged = new Date(entry.date + 'T00:00:00Z');
+  if (isNaN(logged.getTime())) return null;
+  const from = new Date(logged); from.setUTCDate(from.getUTCDate() - 3);
+  const to = new Date(logged); to.setUTCDate(to.getUTCDate() + 3);
+  const fmt = function (d) { return d.toISOString().slice(0, 10).replace(/-/g, ''); };
+
+  const data = await espnGet('/scoreboard?dates=' + fmt(from) + '-' + fmt(to));
+  const events = data.events || [];
+  for (const e of events) {
+    const comp = e.competitions && e.competitions[0];
+    if (!comp || !comp.competitors) continue;
+    const teamNames = comp.competitors.map(function (c) { return c.team.displayName; });
+    if (!names.every(function (n) { return teamNames.indexOf(n) !== -1; })) continue;
+    const completed = comp.status && comp.status.type && comp.status.type.completed;
+    if (!completed) return 'pending'; // found the right game, just not final yet
+    const sideTeam = comp.competitors.find(function (c) { return c.team.displayName === entry.side; });
+    if (!sideTeam) return null;
+    return sideTeam.winner ? 'win' : 'loss';
+  }
+  return null; // no game between these two teams found in the window -- wrong/missing date, most likely
+}
+
+async function fetchTradeResults() {
+  const status = $('fetchResultsStatus');
+  const entries = loadLog();
+  const pending = entries.filter(function (e) { return e.result === 'pending'; });
+  if (!pending.length) { status.textContent = 'No pending trades to check.'; return; }
+
+  status.textContent = 'Checking ' + pending.length + ' pending trade' + (pending.length === 1 ? '' : 's') + '…';
+  let updated = 0, notFinal = 0, notFound = 0;
+  for (const entry of pending) {
+    try {
+      const result = await fetchGameResultForTrade(entry);
+      if (result === 'win' || result === 'loss') { entry.result = result; updated++; }
+      else if (result === 'pending') notFinal++;
+      else notFound++;
+    } catch (err) {
+      notFound++;
+    }
+  }
+  saveLog(entries);
+  renderLog();
+  status.textContent = '✓ Settled ' + updated + ' trade' + (updated === 1 ? '' : 's') +
+    (notFinal ? ' · ' + notFinal + ' game' + (notFinal === 1 ? '' : 's') + ' not final yet' : '') +
+    (notFound ? ' · ' + notFound + ' not found (check the matchup/date match a real game)' : '') + '.';
+}
+
 function setTradeResult(id, result) {
   const entries = loadLog();
   const e = entries.find(function (x) { return x.id === id; });
