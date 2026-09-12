@@ -455,6 +455,11 @@ function applyTeamSummaryToInputs(side, s) {
 const TSI_KEYS = ['EpaDiff', 'PointsFor', 'PointsAgainst', 'TurnoverMargin', 'OffPassEpa', 'DefEpaAllowed',
   'YardsDiff', 'OffRushEpa', 'OffRushYards', 'DefRushYards', 'OffTotalYards', 'DefTotalYards', 'DefPassYards', 'OffPassYards'];
 
+// Returns { total, contributions } -- contributions holds each term's actual weighted
+// contribution (weight * z-score) to this team's TSI, keyed the same as the weights object.
+// This is exactly what the "+/- score" badge next to each stat displays (renderContribBadges,
+// same convention as the baseball model), computed once here so the UI can never drift out of
+// sync with the real math.
 function compositeTSI(side, w, base) {
   const g = function (key) { return val(key + side); };
   const zEpaDiff = z(g('epaDiff'), base.epaDiffMean, base.epaDiffSd);
@@ -472,11 +477,57 @@ function compositeTSI(side, w, base) {
   const zDefPassYards = -z(g('defPassYards'), base.defPassYardsMean, base.defPassYardsSd);
   const zOffPassYards = z(g('offPassYards'), base.offPassYardsMean, base.offPassYardsSd);
 
-  return w.EpaDiff * zEpaDiff + w.PointsFor * zPointsFor + w.PointsAgainst * zPointsAgainst +
-    w.TurnoverMargin * zTurnoverMargin + w.OffPassEpa * zOffPassEpa + w.DefEpaAllowed * zDefEpaAllowed +
-    w.YardsDiff * zYardsDiff + w.OffRushEpa * zOffRushEpa + w.OffRushYards * zOffRushYards +
-    w.DefRushYards * zDefRushYards + w.OffTotalYards * zOffTotalYards + w.DefTotalYards * zDefTotalYards +
-    w.DefPassYards * zDefPassYards + w.OffPassYards * zOffPassYards;
+  const contributions = {
+    EpaDiff: w.EpaDiff * zEpaDiff,
+    PointsFor: w.PointsFor * zPointsFor,
+    PointsAgainst: w.PointsAgainst * zPointsAgainst,
+    TurnoverMargin: w.TurnoverMargin * zTurnoverMargin,
+    OffPassEpa: w.OffPassEpa * zOffPassEpa,
+    DefEpaAllowed: w.DefEpaAllowed * zDefEpaAllowed,
+    YardsDiff: w.YardsDiff * zYardsDiff,
+    OffRushEpa: w.OffRushEpa * zOffRushEpa,
+    OffRushYards: w.OffRushYards * zOffRushYards,
+    DefRushYards: w.DefRushYards * zDefRushYards,
+    OffTotalYards: w.OffTotalYards * zOffTotalYards,
+    DefTotalYards: w.DefTotalYards * zDefTotalYards,
+    DefPassYards: w.DefPassYards * zDefPassYards,
+    OffPassYards: w.OffPassYards * zOffPassYards
+  };
+  let total = 0;
+  Object.keys(contributions).forEach(function (k) { total += contributions[k]; });
+  return { total: total, contributions: contributions };
+}
+
+// Same +/- badge convention as the baseball model: green (points up) when a stat is pulling
+// this team's score up, red when it's dragging it down -- a glance tells you both direction
+// and rough size, on a scale consistent with the rest of the app.
+function paintContribBadge(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (value === null || value === undefined || isNaN(value)) {
+    el.textContent = '';
+    el.className = 'stat-contrib';
+    return;
+  }
+  const pts = value * 100;
+  el.textContent = (pts >= 0 ? '+' : '') + pts.toFixed(2);
+  el.className = 'stat-contrib ' + (pts >= 0 ? 'pl-pos' : 'pl-neg');
+}
+function renderContribBadges(side, c) {
+  paintContribBadge('contribEpaDiff' + side, c.EpaDiff);
+  paintContribBadge('contribPointsFor' + side, c.PointsFor);
+  paintContribBadge('contribPointsAgainst' + side, c.PointsAgainst);
+  paintContribBadge('contribTurnoverMargin' + side, c.TurnoverMargin);
+  paintContribBadge('contribOffPassEpa' + side, c.OffPassEpa);
+  paintContribBadge('contribDefEpaAllowed' + side, c.DefEpaAllowed);
+  paintContribBadge('contribYardsDiff' + side, c.YardsDiff);
+  paintContribBadge('contribOffRushEpa' + side, c.OffRushEpa);
+  paintContribBadge('contribOffRushYards' + side, c.OffRushYards);
+  paintContribBadge('contribDefRushYards' + side, c.DefRushYards);
+  paintContribBadge('contribOffTotalYards' + side, c.OffTotalYards);
+  paintContribBadge('contribDefTotalYards' + side, c.DefTotalYards);
+  paintContribBadge('contribDefPassYards' + side, c.DefPassYards);
+  paintContribBadge('contribOffPassYards' + side, c.OffPassYards);
 }
 
 function recalc() {
@@ -495,10 +546,12 @@ function recalc() {
     'offPassYardsMean', 'offPassYardsSd'].forEach(function (k) { base[k] = val(k); });
   const scale = val('scale');
 
-  const tsiA = compositeTSI('A', w, base);
-  const tsiB = compositeTSI('B', w, base);
-  const impliedA = logistic(tsiA, scale), impliedB = logistic(tsiB, scale);
+  const resultA = compositeTSI('A', w, base);
+  const resultB = compositeTSI('B', w, base);
+  const impliedA = logistic(resultA.total, scale), impliedB = logistic(resultB.total, scale);
   const modelA = log5(impliedA, impliedB), modelB = 1 - modelA;
+  renderContribBadges('A', resultA.contributions);
+  renderContribBadges('B', resultB.contributions);
 
   const priceACents = val('priceA');
   let priceBCents = val('priceB');

@@ -103,6 +103,13 @@
   .field { margin-bottom: 12px; }
   .field:last-child { margin-bottom: 0; }
   label { display: block; font-size: 13px; color: var(--ink-muted); margin-bottom: 4px; }
+  /* Each stat's actual weighted contribution to that team's TSI (weight * z-score) -- same
+     +/- badge convention as the baseball model: green when it's pulling the team's score up,
+     red when it's dragging it down. Recomputed by recalc() -> renderContribBadges() every time
+     any input changes, so it never drifts out of sync with the real math. */
+  .stat-contrib { font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 4px; }
+  .pl-pos { color: var(--pos); }
+  .pl-neg { color: var(--neg); }
   input[type="text"], input[type="number"], select {
     width: 100%; background: var(--panel-alt); border: 1px solid var(--rule); color: var(--ink);
     padding: 8px 10px; border-radius: 6px; font-size: 14px;
@@ -277,58 +284,58 @@
   <div class="grid" style="margin-top:18px;">
     <div class="card team-a">
       <h2><span id="cardATitle">Team A &mdash; Season Stats</span></h2>
-      <div class="field"><label for="epaDiffA">EPA differential /gm</label><input type="number" id="epaDiffA" step="0.01" value="0"></div>
+      <div class="field"><label for="epaDiffA">EPA differential /gm <span class="stat-contrib" id="contribEpaDiffA"></span></label><input type="number" id="epaDiffA" step="0.01" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="pointsForA">Points for /gm</label><input type="number" id="pointsForA" step="0.1" value="22"></div>
-        <div class="field"><label for="pointsAgainstA">Points against /gm</label><input type="number" id="pointsAgainstA" step="0.1" value="22"></div>
+        <div class="field"><label for="pointsForA">Points for /gm <span class="stat-contrib" id="contribPointsForA"></span></label><input type="number" id="pointsForA" step="0.1" value="22"></div>
+        <div class="field"><label for="pointsAgainstA">Points against /gm <span class="stat-contrib" id="contribPointsAgainstA"></span></label><input type="number" id="pointsAgainstA" step="0.1" value="22"></div>
       </div>
-      <div class="field"><label for="turnoverMarginA">Turnover margin /gm</label><input type="number" id="turnoverMarginA" step="0.01" value="0"></div>
+      <div class="field"><label for="turnoverMarginA">Turnover margin /gm <span class="stat-contrib" id="contribTurnoverMarginA"></span></label><input type="number" id="turnoverMarginA" step="0.01" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="offPassEpaA">Off passing EPA /gm</label><input type="number" id="offPassEpaA" step="0.01" value="0"></div>
-        <div class="field"><label for="defEpaAllowedA">Def EPA allowed /gm</label><input type="number" id="defEpaAllowedA" step="0.01" value="0"></div>
+        <div class="field"><label for="offPassEpaA">Off passing EPA /gm <span class="stat-contrib" id="contribOffPassEpaA"></span></label><input type="number" id="offPassEpaA" step="0.01" value="0"></div>
+        <div class="field"><label for="defEpaAllowedA">Def EPA allowed /gm <span class="stat-contrib" id="contribDefEpaAllowedA"></span></label><input type="number" id="defEpaAllowedA" step="0.01" value="0"></div>
       </div>
-      <div class="field"><label for="yardsDiffA">Total yards diff /gm</label><input type="number" id="yardsDiffA" step="0.1" value="0"></div>
+      <div class="field"><label for="yardsDiffA">Total yards diff /gm <span class="stat-contrib" id="contribYardsDiffA"></span></label><input type="number" id="yardsDiffA" step="0.1" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="offRushEpaA">Off rush EPA /gm</label><input type="number" id="offRushEpaA" step="0.01" value="0"></div>
-        <div class="field"><label for="offRushYardsA">Off rush yds /gm</label><input type="number" id="offRushYardsA" step="0.1" value="110"></div>
-      </div>
-      <div class="row2">
-        <div class="field"><label for="defRushYardsA">Def rush yds allowed /gm</label><input type="number" id="defRushYardsA" step="0.1" value="110"></div>
-        <div class="field"><label for="offTotalYardsA">Off total yds /gm</label><input type="number" id="offTotalYardsA" step="0.1" value="330"></div>
+        <div class="field"><label for="offRushEpaA">Off rush EPA /gm <span class="stat-contrib" id="contribOffRushEpaA"></span></label><input type="number" id="offRushEpaA" step="0.01" value="0"></div>
+        <div class="field"><label for="offRushYardsA">Off rush yds /gm <span class="stat-contrib" id="contribOffRushYardsA"></span></label><input type="number" id="offRushYardsA" step="0.1" value="110"></div>
       </div>
       <div class="row2">
-        <div class="field"><label for="defTotalYardsA">Def total yds allowed /gm</label><input type="number" id="defTotalYardsA" step="0.1" value="330"></div>
-        <div class="field"><label for="defPassYardsA">Def pass yds allowed /gm</label><input type="number" id="defPassYardsA" step="0.1" value="220"></div>
+        <div class="field"><label for="defRushYardsA">Def rush yds allowed /gm <span class="stat-contrib" id="contribDefRushYardsA"></span></label><input type="number" id="defRushYardsA" step="0.1" value="110"></div>
+        <div class="field"><label for="offTotalYardsA">Off total yds /gm <span class="stat-contrib" id="contribOffTotalYardsA"></span></label><input type="number" id="offTotalYardsA" step="0.1" value="330"></div>
       </div>
-      <div class="field"><label for="offPassYardsA">Off pass yds /gm</label><input type="number" id="offPassYardsA" step="0.1" value="220"></div>
+      <div class="row2">
+        <div class="field"><label for="defTotalYardsA">Def total yds allowed /gm <span class="stat-contrib" id="contribDefTotalYardsA"></span></label><input type="number" id="defTotalYardsA" step="0.1" value="330"></div>
+        <div class="field"><label for="defPassYardsA">Def pass yds allowed /gm <span class="stat-contrib" id="contribDefPassYardsA"></span></label><input type="number" id="defPassYardsA" step="0.1" value="220"></div>
+      </div>
+      <div class="field"><label for="offPassYardsA">Off pass yds /gm <span class="stat-contrib" id="contribOffPassYardsA"></span></label><input type="number" id="offPassYardsA" step="0.1" value="220"></div>
     </div>
 
     <div class="card team-b">
       <h2><span id="cardBTitle">Team B &mdash; Season Stats</span></h2>
-      <div class="field"><label for="epaDiffB">EPA differential /gm</label><input type="number" id="epaDiffB" step="0.01" value="0"></div>
+      <div class="field"><label for="epaDiffB">EPA differential /gm <span class="stat-contrib" id="contribEpaDiffB"></span></label><input type="number" id="epaDiffB" step="0.01" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="pointsForB">Points for /gm</label><input type="number" id="pointsForB" step="0.1" value="22"></div>
-        <div class="field"><label for="pointsAgainstB">Points against /gm</label><input type="number" id="pointsAgainstB" step="0.1" value="22"></div>
+        <div class="field"><label for="pointsForB">Points for /gm <span class="stat-contrib" id="contribPointsForB"></span></label><input type="number" id="pointsForB" step="0.1" value="22"></div>
+        <div class="field"><label for="pointsAgainstB">Points against /gm <span class="stat-contrib" id="contribPointsAgainstB"></span></label><input type="number" id="pointsAgainstB" step="0.1" value="22"></div>
       </div>
-      <div class="field"><label for="turnoverMarginB">Turnover margin /gm</label><input type="number" id="turnoverMarginB" step="0.01" value="0"></div>
+      <div class="field"><label for="turnoverMarginB">Turnover margin /gm <span class="stat-contrib" id="contribTurnoverMarginB"></span></label><input type="number" id="turnoverMarginB" step="0.01" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="offPassEpaB">Off passing EPA /gm</label><input type="number" id="offPassEpaB" step="0.01" value="0"></div>
-        <div class="field"><label for="defEpaAllowedB">Def EPA allowed /gm</label><input type="number" id="defEpaAllowedB" step="0.01" value="0"></div>
+        <div class="field"><label for="offPassEpaB">Off passing EPA /gm <span class="stat-contrib" id="contribOffPassEpaB"></span></label><input type="number" id="offPassEpaB" step="0.01" value="0"></div>
+        <div class="field"><label for="defEpaAllowedB">Def EPA allowed /gm <span class="stat-contrib" id="contribDefEpaAllowedB"></span></label><input type="number" id="defEpaAllowedB" step="0.01" value="0"></div>
       </div>
-      <div class="field"><label for="yardsDiffB">Total yards diff /gm</label><input type="number" id="yardsDiffB" step="0.1" value="0"></div>
+      <div class="field"><label for="yardsDiffB">Total yards diff /gm <span class="stat-contrib" id="contribYardsDiffB"></span></label><input type="number" id="yardsDiffB" step="0.1" value="0"></div>
       <div class="row2">
-        <div class="field"><label for="offRushEpaB">Off rush EPA /gm</label><input type="number" id="offRushEpaB" step="0.01" value="0"></div>
-        <div class="field"><label for="offRushYardsB">Off rush yds /gm</label><input type="number" id="offRushYardsB" step="0.1" value="110"></div>
-      </div>
-      <div class="row2">
-        <div class="field"><label for="defRushYardsB">Def rush yds allowed /gm</label><input type="number" id="defRushYardsB" step="0.1" value="110"></div>
-        <div class="field"><label for="offTotalYardsB">Off total yds /gm</label><input type="number" id="offTotalYardsB" step="0.1" value="330"></div>
+        <div class="field"><label for="offRushEpaB">Off rush EPA /gm <span class="stat-contrib" id="contribOffRushEpaB"></span></label><input type="number" id="offRushEpaB" step="0.01" value="0"></div>
+        <div class="field"><label for="offRushYardsB">Off rush yds /gm <span class="stat-contrib" id="contribOffRushYardsB"></span></label><input type="number" id="offRushYardsB" step="0.1" value="110"></div>
       </div>
       <div class="row2">
-        <div class="field"><label for="defTotalYardsB">Def total yds allowed /gm</label><input type="number" id="defTotalYardsB" step="0.1" value="330"></div>
-        <div class="field"><label for="defPassYardsB">Def pass yds allowed /gm</label><input type="number" id="defPassYardsB" step="0.1" value="220"></div>
+        <div class="field"><label for="defRushYardsB">Def rush yds allowed /gm <span class="stat-contrib" id="contribDefRushYardsB"></span></label><input type="number" id="defRushYardsB" step="0.1" value="110"></div>
+        <div class="field"><label for="offTotalYardsB">Off total yds /gm <span class="stat-contrib" id="contribOffTotalYardsB"></span></label><input type="number" id="offTotalYardsB" step="0.1" value="330"></div>
       </div>
-      <div class="field"><label for="offPassYardsB">Off pass yds /gm</label><input type="number" id="offPassYardsB" step="0.1" value="220"></div>
+      <div class="row2">
+        <div class="field"><label for="defTotalYardsB">Def total yds allowed /gm <span class="stat-contrib" id="contribDefTotalYardsB"></span></label><input type="number" id="defTotalYardsB" step="0.1" value="330"></div>
+        <div class="field"><label for="defPassYardsB">Def pass yds allowed /gm <span class="stat-contrib" id="contribDefPassYardsB"></span></label><input type="number" id="defPassYardsB" step="0.1" value="220"></div>
+      </div>
+      <div class="field"><label for="offPassYardsB">Off pass yds /gm <span class="stat-contrib" id="contribOffPassYardsB"></span></label><input type="number" id="offPassYardsB" step="0.1" value="220"></div>
     </div>
   </div>
 
