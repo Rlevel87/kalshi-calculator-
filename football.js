@@ -155,12 +155,15 @@ async function getDepthChart(teamAbbrev) {
   return { offenseGroup: offenseGroup || null, defenseGroup: defenseGroup || null };
 }
 // One call returns every season ESPN has on file for this player, across every stat category
-// (passing/rushing/receiving/defensive/kicking/punting -- whichever apply). Fetched once when
-// the stats modal opens; switching the year dropdown just re-slices this same cached result,
-// no extra network round-trip per year.
-async function getPlayerCategories(athleteId) {
-  const data = await espnWebGet('/athletes/' + athleteId + '/stats');
-  return data.categories || [];
+// (passing/rushing/receiving/defensive/kicking/punting -- whichever apply). Cached per athlete
+// so the stats modal and the depth-chart usage ranking below (reorderSlotsByUsage) share one
+// fetch instead of two whenever the same player shows up in both.
+const playerCategoriesCache = {}; // athleteId -> Promise<categories[]>
+function getPlayerCategories(athleteId) {
+  if (!playerCategoriesCache[athleteId]) {
+    playerCategoriesCache[athleteId] = espnWebGet('/athletes/' + athleteId + '/stats').then(function (data) { return data.categories || []; });
+  }
+  return playerCategoriesCache[athleteId];
 }
 function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
 
@@ -187,6 +190,75 @@ function sortSlots(slots, hintOrder) {
     return ia - ib;
   });
 }
+
+/* ---------------------------- depth chart: rank by season usage, not this week's ESPN order ---------------------------- */
+// ESPN's own depth-chart feed silently re-sorts week to week to reflect who's actually playing --
+// an injured starter can end up several slots down with a healthy backup shown "first" instead
+// (verified live: Arizona's RB slot currently lists a rookie, then two backups, THEN James
+// Conner -- their actual starter, on IR -- ahead of only one other injured player). This re-sorts
+// each slot by real usage instead, so the player who's actually done the job stays on top through
+// a short-term injury, struck through rather than quietly losing their spot to whoever's filling
+// in this week.
+function usageStatForSlotKey(key, isOffense) {
+  if (!isOffense) return ['defensive', 'totalTackles'];
+  if (key === 'qb') return ['passing', 'passingAttempts'];
+  if (key === 'rb') return ['rushing', 'rushingAttempts'];
+  if (key.indexOf('wr') === 0 || key === 'te') return ['receiving', 'receivingTargets'];
+  return null; // offensive line -- no per-play usage stat exists to rank by; keep ESPN's own order
+}
+
+const usageStatCache = {}; // "athleteId|category|field" -> Promise<number>
+function getPlayerUsageStat(athleteId, category, field) {
+  const cacheKey = athleteId + '|' + category + '|' + field;
+  if (!usageStatCache[cacheKey]) {
+    usageStatCache[cacheKey] = (async function () {
+      try {
+        const cats = await getPlayerCategories(athleteId);
+        const cat = cats.find(function (c) { return c.name === category; });
+        if (!cat || !cat.names || !cat.statistics || !cat.statistics.length) return 0;
+        const gpIdx = cat.names.indexOf('gamesPlayed');
+        const fieldIdx = cat.names.indexOf(field);
+        if (fieldIdx === -1) return 0;
+        // The most recent season where they played close to a full slate (>=6 games) is the
+        // best read on "who this player really is" -- an injury-shortened season (this year's
+        // or even last year's) shouldn't make a real starter look like a career backup. Falls
+        // back to whatever's most recent if nothing qualifies within the seasons on file.
+        const rows = cat.statistics.slice().sort(function (a, b) {
+          return (b.season ? b.season.year : 0) - (a.season ? a.season.year : 0);
+        });
+        const qualifying = gpIdx === -1 ? null : rows.find(function (s) { return parseFloat(s.stats[gpIdx]) >= 6; });
+        const row = qualifying || rows[0];
+        const v = parseFloat(row.stats[fieldIdx]);
+        return isNaN(v) ? 0 : v;
+      } catch (e) { return 0; } // one player's stats failing to load shouldn't break the whole ranking
+    })();
+  }
+  return usageStatCache[cacheKey];
+}
+
+// Mutates each slot's .athletes into usage-ranked order in place (only for slots where a usage
+// stat applies and there's more than one name to rank); returns the same array for convenience.
+async function reorderSlotsByUsage(slots, isOffense) {
+  const fetches = [];
+  slots.forEach(function (slot) {
+    const sig = usageStatForSlotKey(slot.key, isOffense);
+    if (!sig || slot.athletes.length < 2) return;
+    slot.athletes.forEach(function (a) {
+      fetches.push(getPlayerUsageStat(a.id, sig[0], sig[1]).then(function (usage) { a._usage = usage; }));
+    });
+  });
+  if (fetches.length) await Promise.all(fetches);
+  slots.forEach(function (slot) {
+    const sig = usageStatForSlotKey(slot.key, isOffense);
+    if (!sig || slot.athletes.length < 2) return;
+    slot.athletes = slot.athletes
+      .map(function (a, i) { return { a: a, i: i }; })
+      .sort(function (x, y) { return (y.a._usage - x.a._usage) || (x.i - y.i); }) // higher usage first; ties keep ESPN's own relative order
+      .map(function (x) { return x.a; });
+  });
+  return slots;
+}
+
 /* ---------------------------- main fetch orchestration ---------------------------- */
 async function fetchMatchup() {
   const btn = $('fetchBtn');
@@ -224,6 +296,12 @@ async function fetchMatchup() {
     ]);
     const offSlotsA = buildSlotList(dcA.offenseGroup), defSlotsA = buildSlotList(dcA.defenseGroup);
     const offSlotsB = buildSlotList(dcB.offenseGroup), defSlotsB = buildSlotList(dcB.defenseGroup);
+
+    status.textContent = 'Ranking depth charts by season usage (so an injured starter stays on top)…';
+    await Promise.all([
+      reorderSlotsByUsage(offSlotsA, true), reorderSlotsByUsage(defSlotsA, false),
+      reorderSlotsByUsage(offSlotsB, true), reorderSlotsByUsage(defSlotsB, false)
+    ]);
     renderDepthChartGrid(teamA.displayName, offSlotsA, defSlotsA, teamB.displayName, offSlotsB, defSlotsB, injuryMap);
     $('depthChartStatus').textContent = '✓ Depth charts and injury report loaded for both teams.';
 
@@ -245,7 +323,11 @@ function renderDepthChartGrid(nameA, offA, defA, nameB, offB, defB, injuryMap) {
     return sortSlots(slots, hintOrder).map(function (slot) {
       const names = slot.athletes.slice(0, 3).map(function (a, i) {
         const inj = injuryMap[a.id];
-        const cls = i === 0 ? (inj && inj.inactive ? 'inactive' : 'starter') : 'backup';
+        // Struck-through whenever THEY'RE the one who's out, regardless of which slot position
+        // they land in -- previously this only checked the top slot, so an injured starter who'd
+        // been bumped down (or, before the usage-ranking above, an injured starter ESPN itself
+        // had demoted) showed no strikethrough at all.
+        const cls = (inj && inj.inactive) ? 'inactive' : (i === 0 ? 'starter' : 'backup');
         const tag = inj ? '<span class="injury-tag" title="' + (inj.detail || '') + '">' + inj.status + '</span>' : '';
         return '<span class="depth-player clickable ' + cls + '" data-athlete-id="' + a.id +
           '" data-athlete-name="' + escapeAttr(a.displayName) + '" data-pos="' + escapeAttr(slot.abbrev) +
