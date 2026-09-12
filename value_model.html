@@ -886,10 +886,13 @@
   <div class="card" style="margin-top:22px;">
     <h2>Trade Log</h2>
     <div class="log-controls">
+      <button type="button" class="btn" onclick="fetchTradeResults()" id="fetchTradeResultsBtn">Fetch results for pending trades</button>
       <button type="button" class="btn" onclick="exportLog()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
     </div>
+    <div class="fetch-status" style="margin-bottom:10px;">Set the Result manually, or click "Fetch results for pending trades" to pull final scores from MLB automatically.</div>
+    <div class="fetch-status" id="fetchTradeResultsStatus" style="margin-bottom:10px;"></div>
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
     <div class="log-scroll" style="margin-top:12px; max-height:398px;">
       <table class="log-table">
@@ -1984,6 +1987,52 @@ function setTradeResult(id, result) {
   if (e) e.result = result;
   saveLog(entries);
   renderLog();
+}
+
+// Walks every still-pending logged trade, resolves the two teams in its matchup plus whichever
+// team the trade was actually placed on, and settles win/loss once that day's game is final --
+// same lookup fetchMatchupResult() below already does for the Matchup Data log, just mapped onto
+// the Trade Log's own field names (matchup/side instead of nameA/nameB) and win/loss instead of A/B.
+async function fetchTradeResults() {
+  const btn = document.getElementById('fetchTradeResultsBtn');
+  const status = document.getElementById('fetchTradeResultsStatus');
+  const entries = loadLog();
+  const pending = entries.filter(function (e) { return e.result === 'pending'; });
+  if (!pending.length) {
+    status.textContent = 'No pending trades to check.';
+    return;
+  }
+
+  btn.disabled = true;
+  let updated = 0, stillPending = 0, unresolved = 0;
+  try {
+    const teams = await getTeams();
+    for (let i = 0; i < pending.length; i++) {
+      const e = pending[i];
+      status.textContent = 'Checking ' + (i + 1) + ' of ' + pending.length + ' pending trade(s) — ' + e.matchup + '…';
+      const names = e.matchup.split(' vs ');
+      if (names.length !== 2) { unresolved++; continue; }
+      const teamA = findTeam(names[0], teams);
+      const teamB = findTeam(names[1], teams);
+      const sideTeam = findTeam(e.side, teams);
+      if (!teamA || !teamB || !sideTeam) { unresolved++; continue; }
+      try {
+        const winnerId = await fetchMatchupResult(teamA.id, teamB.id, e.date);
+        if (winnerId === null) { stillPending++; continue; }
+        e.result = (winnerId === sideTeam.id) ? 'win' : 'loss';
+        updated++;
+      } catch (err) { stillPending++; }
+    }
+    saveLog(entries);
+    renderLog();
+    status.textContent = '✓ Checked ' + pending.length + ' pending trade(s) — ' + updated + ' updated' +
+      (stillPending ? ', ' + stillPending + ' still not final' : '') +
+      (unresolved ? ', ' + unresolved + ' team name(s) not matched' : '') + '.';
+  } catch (err) {
+    status.textContent = 'Fetch failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function deleteTrade(id) {
