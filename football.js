@@ -163,6 +163,35 @@ async function getInjuriesByAthleteId() {
   return map;
 }
 
+// This league-wide widget turns out to miss real, current designations -- confirmed live: a
+// player on Reserve/PUP recovering from surgery showed "Out" on his own team's roster listing
+// but never appeared in /injuries at all, apparently because that widget tracks this-week's
+// questionable/doubtful-type calls more reliably than season-long PUP/IR designations. Each
+// player's OWN roster entry carries the same status directly (roster.athletes[].injuries[]),
+// so this pulls it per team instead -- only 2 calls since depth charts only ever compare 2
+// teams, and it's merged on TOP of the league-wide map in fetchMatchup() below (roster wins on
+// any overlap, since it's the more current of the two; the league-wide feed stays as a fallback
+// for anything the roster fetch doesn't carry, e.g. a KEY player's status on the OTHER side of
+// this matchup if that team's own roster call happened to fail).
+async function getRosterInjuriesByAthleteId(teamAbbrev) {
+  const data = await espnGet('/teams/' + teamAbbrev.toLowerCase() + '/roster');
+  const map = {};
+  (data.athletes || []).forEach(function (group) {
+    (group.items || []).forEach(function (player) {
+      const injuries = player.injuries || [];
+      if (!injuries.length) return;
+      const latest = injuries.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); })[0];
+      const statusText = latest.status || 'Unknown';
+      map[player.id] = {
+        status: statusText,
+        detail: null,
+        inactive: INACTIVE_STATUSES.indexOf(statusText.toLowerCase()) !== -1
+      };
+    });
+  });
+  return map;
+}
+
 /* ---------------------------- depth chart ---------------------------- */
 async function getDepthChart(teamAbbrev) {
   const data = await espnGet('/teams/' + teamAbbrev.toLowerCase() + '/depthcharts');
@@ -308,11 +337,17 @@ async function fetchMatchup() {
     applyTeamSummaryToInputs('B', summaryB);
 
     status.textContent = 'Fetching depth charts and injuries…';
-    const [dcA, dcB, injuryMap] = await Promise.all([
+    const [dcA, dcB, leagueInjuries, rosterInjuriesA, rosterInjuriesB] = await Promise.all([
       getDepthChart(teamA.abbreviation),
       getDepthChart(teamB.abbreviation),
-      getInjuriesByAthleteId()
+      getInjuriesByAthleteId(),
+      getRosterInjuriesByAthleteId(teamA.abbreviation).catch(function () { return {}; }),
+      getRosterInjuriesByAthleteId(teamB.abbreviation).catch(function () { return {}; })
     ]);
+    // Roster data wins on any overlap -- it's the more current, more complete of the two (see
+    // getRosterInjuriesByAthleteId's comment); the league-wide feed just fills in anything a
+    // roster call missed or failed on.
+    const injuryMap = Object.assign({}, leagueInjuries, rosterInjuriesA, rosterInjuriesB);
     const offSlotsA = buildSlotList(dcA.offenseGroup), defSlotsA = buildSlotList(dcA.defenseGroup);
     const offSlotsB = buildSlotList(dcB.offenseGroup), defSlotsB = buildSlotList(dcB.defenseGroup);
 
