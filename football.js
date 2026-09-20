@@ -694,6 +694,39 @@ function logCurrentTrade() {
   betInput.value = '';
   renderLog();
 }
+
+// A spread bet has no model prediction to pull from (compositeTSI only estimates win
+// probability, not a point margin), so this is entered by hand rather than auto-filled from
+// lastCalc like the moneyline flow above. Convention: spreadLine is signed FROM the logged
+// team's own perspective -- positive means they're getting points (the underdog side, e.g.
+// "Bears +7.5" covers as long as they lose by 7 or less, or win outright), negative means
+// they're giving points (the favorite, e.g. "Vikings -7.5" only covers by winning by more than
+// 7.5) -- same sign convention sportsbooks use next to the favorite/underdog.
+function logSpreadTrade() {
+  const nameA = txt('teamAName'), nameB = txt('teamBName');
+  if (!nameA || !nameB) { alert('Enter or fetch both teams first.'); return; }
+  const side = $('spreadTeamSide').value;
+  const line = parseFloat($('spreadLine').value);
+  const priceCents = parseFloat($('spreadPrice').value);
+  const betInput = $('betAmount');
+  const stake = parseFloat(betInput.value);
+  if (isNaN(line)) { alert('Enter the spread line (e.g. 7.5 for getting points, -7.5 for giving them).'); return; }
+  if (!priceCents || priceCents <= 0 || priceCents >= 100) { alert('Enter a price between 1 and 99 cents.'); return; }
+  if (!stake || stake <= 0) { alert('Enter how much you\'re wagering first.'); return; }
+
+  const entries = loadLog();
+  entries.push({
+    id: Date.now(), date: new Date().toISOString().slice(0, 10),
+    matchup: nameA + ' vs ' + nameB,
+    side: side === 'A' ? nameA : nameB,
+    betType: 'spread', spreadLine: line,
+    price: priceCents / 100, stakeDollars: stake, result: 'pending'
+  });
+  saveLog(entries);
+  betInput.value = ''; $('spreadLine').value = ''; $('spreadPrice').value = '';
+  renderLog();
+}
+
 function exportLog() {
   const blob = new Blob([JSON.stringify(loadLog(), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -720,35 +753,61 @@ function importLog(event) {
   reader.readAsText(file);
   event.target.value = '';
 }
-// Looks up whether one logged trade's game has actually been played yet, and if so who won --
-// ESPN's scoreboard reports each competitor by the same full team display name ("Seattle
-// Seahawks") already stored in matchup/side, so no abbreviation lookup is needed, just a direct
-// string match. Searches a +/-3 day window around the date the trade was LOGGED (not
+// Looks up whether one logged trade's game has actually been played yet, and if so how it
+// settles -- ESPN's scoreboard reports each competitor by the same full team display name
+// ("Seattle Seahawks") already stored in matchup/side, so no abbreviation lookup is needed, just
+// a direct string match. Searches a +/-3 day window around the date the trade was LOGGED (not
 // necessarily game day itself -- a trade logged the day before kickoff is common) rather than
 // requiring an exact date or NFL week number.
+//
+// Moneyline entries settle on the competitor's own `winner` flag, same as before. Spread entries
+// (betType === 'spread') instead pull both final scores and check whether the logged team's own
+// margin clears their spreadLine (see logSpreadTrade's comment for the sign convention) -- an
+// exact push (only possible on a whole-number line, never a half-point one) settles as 'push'
+// rather than win/loss, since no side actually covered.
 async function fetchGameResultForTrade(entry) {
   const names = entry.matchup.split(' vs ');
   if (names.length !== 2) return null;
   const logged = new Date(entry.date + 'T00:00:00Z');
   if (isNaN(logged.getTime())) return null;
-  const from = new Date(logged); from.setUTCDate(from.getUTCDate() - 3);
-  const to = new Date(logged); to.setUTCDate(to.getUTCDate() + 3);
   const fmt = function (d) { return d.toISOString().slice(0, 10).replace(/-/g, ''); };
 
-  const data = await espnGet('/scoreboard?dates=' + fmt(from) + '-' + fmt(to));
-  const events = data.events || [];
-  for (const e of events) {
-    const comp = e.competitions && e.competitions[0];
-    if (!comp || !comp.competitors) continue;
-    const teamNames = comp.competitors.map(function (c) { return c.team.displayName; });
-    if (!names.every(function (n) { return teamNames.indexOf(n) !== -1; })) continue;
-    const completed = comp.status && comp.status.type && comp.status.type.completed;
-    if (!completed) return 'pending'; // found the right game, just not final yet
-    const sideTeam = comp.competitors.find(function (c) { return c.team.displayName === entry.side; });
-    if (!sideTeam) return null;
-    return sideTeam.winner ? 'win' : 'loss';
+  // ESPN's scoreboard dates=RANGE syntax (dates=YYYYMMDD-YYYYMMDD) has stopped being accepted --
+  // confirmed live: every hyphenated range now 400s, even a "range" of one day to itself, while
+  // a single dates=YYYYMMDD still works fine. So this checks each day in the +/-3 day window
+  // individually instead of the one range query this used to be.
+  for (let offset = -3; offset <= 3; offset++) {
+    const day = new Date(logged); day.setUTCDate(day.getUTCDate() + offset);
+    let data;
+    try {
+      data = await espnGet('/scoreboard?dates=' + fmt(day));
+    } catch (err) {
+      continue; // this day's query failed -- keep trying the rest of the window
+    }
+    const events = data.events || [];
+    for (const e of events) {
+      const comp = e.competitions && e.competitions[0];
+      if (!comp || !comp.competitors) continue;
+      const teamNames = comp.competitors.map(function (c) { return c.team.displayName; });
+      if (!names.every(function (n) { return teamNames.indexOf(n) !== -1; })) continue;
+      const completed = comp.status && comp.status.type && comp.status.type.completed;
+      if (!completed) return 'pending'; // found the right game, just not final yet
+      const sideTeam = comp.competitors.find(function (c) { return c.team.displayName === entry.side; });
+      const oppTeam = comp.competitors.find(function (c) { return c.team.displayName !== entry.side; });
+      if (!sideTeam || !oppTeam) return null;
+
+      if (entry.betType === 'spread') {
+        const sideScore = parseFloat(sideTeam.score), oppScore = parseFloat(oppTeam.score);
+        if (isNaN(sideScore) || isNaN(oppScore)) return null;
+        const covered = (sideScore - oppScore) + entry.spreadLine;
+        if (covered > 0) return 'win';
+        if (covered < 0) return 'loss';
+        return 'push';
+      }
+      return sideTeam.winner ? 'win' : 'loss';
+    }
   }
-  return null; // no game between these two teams found in the window -- wrong/missing date, most likely
+  return null; // no game between these two teams found anywhere in the window -- wrong/missing date, most likely
 }
 
 async function fetchTradeResults() {
@@ -762,7 +821,7 @@ async function fetchTradeResults() {
   for (const entry of pending) {
     try {
       const result = await fetchGameResultForTrade(entry);
-      if (result === 'win' || result === 'loss') { entry.result = result; updated++; }
+      if (result === 'win' || result === 'loss' || result === 'push') { entry.result = result; updated++; }
       else if (result === 'pending') notFinal++;
       else notFound++;
     } catch (err) {
@@ -786,6 +845,7 @@ function deleteTrade(id) { saveLog(loadLog().filter(function (x) { return x.id !
 function tradePL(entry) {
   if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
   if (entry.result === 'loss') return -entry.stakeDollars;
+  if (entry.result === 'push') return 0; // stake refunded -- no side covered, no gain or loss
   return null;
 }
 function renderLog() {
@@ -797,22 +857,32 @@ function renderLog() {
     const pl = tradePL(e);
     const toWin = e.stakeDollars * (1 - e.price) / e.price;
     if (pl !== null) { settled++; if (pl > 0) wins++; totalPL += pl; }
+    // Spread entries have no model prediction to show (compositeTSI only estimates win
+    // probability, not a point margin) -- Model % blanks out and the Edge column shows the
+    // logged spread line instead, same sign convention logSpreadTrade uses (+ = getting points).
+    const isSpread = e.betType === 'spread';
+    const modelCell = isSpread ? '—' : fmtNum(e.model * 100, 1) + '%';
+    const edgeCell = isSpread
+      ? (e.spreadLine >= 0 ? '+' : '') + e.spreadLine.toFixed(1) + ' spread'
+      : (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts';
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + e.date + '</td><td>' + e.matchup + '</td><td>' + e.side + '</td>' +
-      '<td>' + Math.round(e.price * 100) + '¢</td><td>' + (e.model * 100).toFixed(1) + '%</td>' +
-      '<td>' + (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts</td>' +
+      '<td>' + Math.round(e.price * 100) + '¢</td><td>' + modelCell + '</td>' +
+      '<td>' + edgeCell + '</td>' +
       '<td>$' + e.stakeDollars.toFixed(2) + '</td><td>+$' + toWin.toFixed(2) + '</td><td></td><td></td><td></td>';
     const select = document.createElement('select');
-    [['pending', 'pending'], ['win', 'win'], ['loss', 'loss']].forEach(function (opt) {
+    [['pending', 'pending'], ['win', 'win'], ['loss', 'loss'], ['push', 'push']].forEach(function (opt) {
       const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
       if (opt[0] === e.result) o.selected = true; select.appendChild(o);
     });
     select.addEventListener('change', function () { setTradeResult(e.id, select.value); });
     tr.children[8].appendChild(select);
     const plTd = tr.children[9];
-    if (pl !== null) { plTd.textContent = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2); plTd.className = pl >= 0 ? 'pos-val' : 'neg-val'; }
-    else plTd.textContent = '—';
+    if (pl !== null) {
+      plTd.textContent = pl === 0 ? '$0.00 (push)' : (pl > 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+      plTd.className = pl > 0 ? 'pos-val' : (pl < 0 ? 'neg-val' : '');
+    } else plTd.textContent = '—';
     const delBtn = document.createElement('button');
     delBtn.type = 'button'; delBtn.className = 'btn'; delBtn.textContent = '✕';
     delBtn.addEventListener('click', function () { deleteTrade(e.id); });

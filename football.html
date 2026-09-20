@@ -494,11 +494,31 @@
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
     </div>
+
+    <div class="adv-sub" style="margin-top:4px;">Or log a point-spread bet instead (e.g. "Bears +7.5" or "Vikings -7.5")</div>
+    <div class="log-controls">
+      <div class="field" style="width:120px;">
+        <label for="spreadTeamSide">Team</label>
+        <select id="spreadTeamSide">
+          <option value="A">Team A</option>
+          <option value="B">Team B</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="spreadLine">Spread (+ getting pts, &minus; giving)</label>
+        <input type="number" id="spreadLine" step="0.5" placeholder="e.g. 7.5 or -7.5">
+      </div>
+      <div class="field" style="width:110px;">
+        <label for="spreadPrice">Price (&cent;)</label>
+        <input type="number" id="spreadPrice" min="1" max="99" step="1" placeholder="e.g. 52">
+      </div>
+      <button type="button" class="btn" onclick="logSpreadTrade()">Log spread bet</button>
+    </div>
     <div class="fetch-status" id="fetchResultsStatus"></div>
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
     <div class="log-scroll" style="margin-top:12px;">
       <table class="log-table">
-        <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge</th><th>Stake</th><th>To Win</th><th>Result</th><th>P/L</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge / Line</th><th>Stake</th><th>To Win</th><th>Result</th><th>P/L</th><th></th></tr></thead>
         <tbody id="logTbody"></tbody>
       </table>
     </div>
