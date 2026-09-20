@@ -271,10 +271,21 @@ function getPlayerUsageStat(athleteId, category, field) {
         // best read on "who this player really is" -- an injury-shortened season (this year's
         // or even last year's) shouldn't make a real starter look like a career backup. Falls
         // back to whatever's most recent if nothing qualifies within the seasons on file.
+        //
+        // Capped to the last 3 seasons (this year and the 2 before it) -- confirmed live this
+        // was letting a stale old season outrank a current one: Dallas's real backup QB (Sam
+        // Howell, a full-time starter for Washington back in 2023, 612 attempts that year, but
+        // only a fringe backup since) was outranking Dak Prescott (2025's real starter, 600
+        // attempts) purely because 612 > 600, with no regard for the fact that one of those
+        // seasons is 3 years staler than the other. Without the cap, a good season from years
+        // ago can beat a current starter's normal season on a pure raw-number technicality.
         const rows = cat.statistics.slice().sort(function (a, b) {
           return (b.season ? b.season.year : 0) - (a.season ? a.season.year : 0);
         });
-        const qualifying = gpIdx === -1 ? null : rows.find(function (s) { return parseFloat(s.stats[gpIdx]) >= 6; });
+        const qualifying = gpIdx === -1 ? null : rows.find(function (s) {
+          const year = s.season ? s.season.year : 0;
+          return parseFloat(s.stats[gpIdx]) >= 6 && year >= NFL_SEASON_YEAR - 2;
+        });
         const row = qualifying || rows[0];
         const v = parseFloat(row.stats[fieldIdx]);
         return isNaN(v) ? 0 : v;
