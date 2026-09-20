@@ -485,6 +485,14 @@
     <h2>Trade Log</h2>
     <div class="log-controls">
       <div class="field">
+        <label for="logSideOverride">Logging trade for</label>
+        <select id="logSideOverride">
+          <option value="">Auto &mdash; whichever side has the bigger edge</option>
+          <option value="A" id="logSideOptA">Team A</option>
+          <option value="B" id="logSideOptB">Team B</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="betAmount">Bet amount ($)</label>
         <input type="number" id="betAmount" min="0" step="1" placeholder="e.g. 25">
       </div>

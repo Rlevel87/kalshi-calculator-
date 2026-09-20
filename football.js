@@ -594,6 +594,8 @@ function recalc() {
   $('cardBTitle').textContent = nameB + ' — ' + (lastFetchedSeason.B ? lastFetchedSeason.B + ' ' : '') + 'Season Stats';
   $('resATitle').textContent = nameA;
   $('resBTitle').textContent = nameB;
+  $('logSideOptA').textContent = nameA;
+  $('logSideOptB').textContent = nameB;
 
   const w = weights('w', TSI_KEYS);
   const base = {};
@@ -663,7 +665,7 @@ function recalc() {
 
   lastCalc = {
     nameA: nameA, nameB: nameB, side: side, edge: edge, price: price, model: model, stakeFrac: stakeFrac, bankroll: bankroll,
-    modelA: modelA, modelB: modelB, marketA: marketA, marketB: marketB
+    modelA: modelA, modelB: modelB, marketA: marketA, marketB: marketB, rawA: rawA, rawB: rawB
   };
   TSI_KEYS.forEach(function (k) {
     const inputKey = k.charAt(0).toLowerCase() + k.slice(1);
@@ -682,16 +684,28 @@ function logCurrentTrade() {
   const betInput = $('betAmount');
   const stake = parseFloat(betInput.value);
   if (!stake || stake <= 0) { alert('Enter how much you\'re wagering first.'); return; }
+
+  // "Auto" (blank) uses whichever side the model's edge favored, same as before. Picking Team A
+  // or Team B explicitly logs THAT side's own numbers instead -- for betting straight up on a
+  // specific team regardless of which side the model likes better.
+  const override = $('logSideOverride').value;
+  const loggedSide = override || lastCalc.side;
+  const loggedModel = loggedSide === 'A' ? lastCalc.modelA : lastCalc.modelB;
+  const loggedMarket = loggedSide === 'A' ? lastCalc.marketA : lastCalc.marketB;
+  const loggedPrice = loggedSide === 'A' ? lastCalc.rawA : lastCalc.rawB;
+  const loggedName = loggedSide === 'A' ? lastCalc.nameA : lastCalc.nameB;
+
   const entries = loadLog();
   entries.push({
     id: Date.now(), date: new Date().toISOString().slice(0, 10),
     matchup: lastCalc.nameA + ' vs ' + lastCalc.nameB,
-    side: lastCalc.side === 'A' ? lastCalc.nameA : lastCalc.nameB,
-    price: lastCalc.price, model: lastCalc.model, edge: lastCalc.edge,
+    side: loggedName,
+    price: loggedPrice, model: loggedModel, edge: loggedModel - loggedMarket,
     stakeDollars: stake, result: 'pending'
   });
   saveLog(entries);
   betInput.value = '';
+  $('logSideOverride').value = ''; // reset to Auto so it doesn't carry over to the next matchup
   renderLog();
 }
 
