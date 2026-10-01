@@ -424,12 +424,7 @@ def _nhl_report_rows(report, season):
     cached = _cache.get(cache_key)
     if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
         return cached['data']
-    r = requests.get(
-        NHL_STATS_API + '/' + report,
-        params={'cayenneExp': 'seasonId=' + season + ' and gameTypeId=2'},
-        timeout=REQUEST_TIMEOUT,
-    )
-    r.raise_for_status()
+    r = _nhl_get_with_retry(NHL_STATS_API + '/' + report, params={'cayenneExp': 'seasonId=' + season + ' and gameTypeId=2'})
     rows = r.json().get('data') or []
     _cache[cache_key] = {'data': rows, 'fetched_at': time.time()}
     return rows
@@ -480,14 +475,25 @@ NHL_INACTIVE_STATUSES = {'out', 'injured reserve', 'long-term injured reserve', 
 MIN_GP_FOR_CURRENT_TOI = 5  # fewer games than this this season -> rank by last season's ice time instead
 
 
+def _nhl_get_with_retry(url, params=None, timeout=REQUEST_TIMEOUT):
+    """The NHL's APIs rate-limit bursts with 429s -- back off and retry a few times rather
+    than failing the whole page."""
+    delay = 1.0
+    for attempt in range(4):
+        r = requests.get(url, params=params, timeout=timeout)
+        if r.status_code != 429 or attempt == 3:
+            r.raise_for_status()
+            return r
+        time.sleep(float(r.headers.get('Retry-After') or delay))
+        delay *= 2
+
+
 def _nhl_web_get(path):
     cache_key = 'nhlweb:' + path
     cached = _cache.get(cache_key)
     if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
         return cached['data']
-    r = requests.get(NHL_WEB_API + '/' + path, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    data = r.json()
+    data = _nhl_get_with_retry(NHL_WEB_API + '/' + path).json()
     _cache[cache_key] = {'data': data, 'fetched_at': time.time()}
     return data
 
@@ -642,17 +648,134 @@ def _compute_nhl_lineup(espn_abbrev):
     for pid in goalie_ids:
         if not starts[pid]:
             starts[pid] = career_starts(pid)
-    goalies = [tag(dict(players[pid], id=pid, starts=starts[pid])) for pid in goalie_ids]
+    goalies = [tag(dict(players[pid], id=pid, starts=starts[pid], **_goalie_save_pct(pid, current, prior)))
+               for pid in goalie_ids]
     goalies.sort(key=lambda g: -g['starts'])
+
+    injury_adjust = _lineup_injury_adjustment(forwards, defense, current, prior)
 
     return {
         'team': abbrev,
+        'injuryAdjust': injury_adjust,
         'forwardLines': lines,
         'defensePairs': [defense[i:i + 2] for i in range(0, min(len(defense), 6), 2)],
         'goalies': goalies[:2],
+        'goalieOptions': goalies,  # every goalie on the roster, for the page's starting-goalie picker
         'extras': [p for p in forwards if p not in top12] + defense[6:],
         'seasonNote': 'ranked by ' + current[:4] + '-' + current[6:] + ' ice time once a player has '
                       + str(MIN_GP_FOR_CURRENT_TOI) + '+ games, else ' + prior[:4] + '-' + prior[6:],
+    }
+
+
+GOALIE_SHRINK_SHOTS = 500  # phantom league-average shots; best of 500/1000/2000 in nhl_goalie_test.py
+
+
+def _league_save_pct(season):
+    cache_key = 'nhlleaguesv:' + season
+    cached = _cache.get(cache_key)
+    if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
+        return cached['data']
+    rows = _nhl_get_with_retry('https://api.nhle.com/stats/rest/en/goalie/summary',
+                               params={'cayenneExp': 'seasonId=' + season + ' and gameTypeId=2', 'limit': -1},
+                               timeout=30).json().get('data') or []
+    shots = sum(r.get('shotsAgainst') or 0 for r in rows)
+    sv = sum(r.get('saves') or 0 for r in rows) / shots if shots else 0.905
+    _cache[cache_key] = {'data': sv, 'fetched_at': time.time()}
+    return sv
+
+
+def _goalie_save_pct(pid, current, prior):
+    """Save % going into tonight, exactly as backtested: this season + last season with any
+    team, shrunk toward last season's league average by GOALIE_SHRINK_SHOTS phantom shots so a
+    goalie with a handful of starts doesn't swing the model."""
+    try:
+        totals = _nhl_web_get('player/' + str(pid) + '/landing').get('seasonTotals') or []
+        league = _league_save_pct(prior)
+    except requests.RequestException:
+        return {'savePct': None, 'rawSavePct': None, 'shots': 0}
+    rows = [t for t in totals if t.get('leagueAbbrev') == 'NHL' and t.get('gameTypeId') == 2
+            and str(t.get('season')) in (current, prior)]
+    shots = sum(t.get('shotsAgainst') or 0 for t in rows)
+    saves = shots - sum(t.get('goalsAgainst') or 0 for t in rows)
+    return {
+        'savePct': (saves + league * GOALIE_SHRINK_SHOTS) / (shots + GOALIE_SHRINK_SHOTS),
+        'rawSavePct': saves / shots if shots else None,
+        'shots': shots,
+    }
+
+
+def _nhl_skater_report(report, season):
+    """League-wide per-player report for one season (one row per player, trades merged), cached."""
+    cache_key = 'nhlskater:' + report + ':' + season
+    cached = _cache.get(cache_key)
+    if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
+        return cached['data']
+    r = _nhl_get_with_retry('https://api.nhle.com/stats/rest/en/skater/' + report,
+                            params={'cayenneExp': 'seasonId=' + season + ' and gameTypeId=2', 'limit': -1},
+                            timeout=30)
+    rows = {row['playerId']: row for row in r.json().get('data') or []}
+    _cache[cache_key] = {'data': rows, 'fetched_at': time.time()}
+    return rows
+
+
+def _lineup_injury_adjustment(forwards, defense, current, prior):
+    """How much tonight's injuries move the team's Corsi % and faceoff %.
+
+    Full strength = the top 12 forwards + top 6 D by ice time, injured included. Tonight = the
+    same with players who are out removed, so healthy depth moves up. Corsi uses each skater's
+    Corsi RELATIVE (on-ice minus off-ice) weighted by 5v5 ice time -- raw on-ice Corsi mostly
+    reflects the team, so a star and his replacement look nearly identical on it. Faceoffs are
+    pooled per game. Zone starts are deliberately not adjusted: a player's zone start % is how
+    the coach deploys him, not how good he is.
+
+    Returned as deltas (tonight minus full strength, fractions) applied on top of the team's
+    own season numbers, which keeps the model's team-level calibration intact."""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            pct = {s: ex.submit(_nhl_skater_report, 'percentages', s) for s in (current, prior)}
+            fo = {s: ex.submit(_nhl_skater_report, 'faceoffwins', s) for s in (current, prior)}
+            pct = {s: f.result() for s, f in pct.items()}
+            fo = {s: f.result() for s, f in fo.items()}
+    except requests.RequestException:
+        return None
+
+    def row(report, pid):
+        cur = report[current].get(pid)
+        if cur and cur.get('gamesPlayed', 0) >= MIN_GP_FOR_CURRENT_TOI:
+            return cur
+        return report[prior].get(pid) or cur
+
+    def lineup(healthy_only):
+        pool_f = [p for p in forwards if not (healthy_only and p['inactive'])][:12]
+        pool_d = [p for p in defense if not (healthy_only and p['inactive'])][:6]
+        return pool_f + pool_d
+
+    def rates(players):
+        w = rel = fo_w = fo_t = 0.0
+        for p in players:
+            r = row(pct, p['id'])
+            if r and r.get('timeOnIcePerGame5v5') and r.get('satRelative') is not None:
+                w += r['timeOnIcePerGame5v5']
+                rel += r['timeOnIcePerGame5v5'] * r['satRelative']
+            # No NHL history (call-up / rookie) -> counts as a replacement-level 0 relative.
+            elif p['toi']:
+                w += p['toi'] * 60 * 0.8
+            f = row(fo, p['id'])
+            if f and f.get('gamesPlayed'):
+                fo_w += (f.get('totalFaceoffWins') or 0) / f['gamesPlayed']
+                fo_t += (f.get('totalFaceoffs') or 0) / f['gamesPlayed']
+        return (rel / w if w else None, fo_w / fo_t if fo_t else None)
+
+    full, tonight = lineup(False), lineup(True)
+    out_players = [p['name'] for p in full if p['inactive']]
+    if not out_players:
+        return {'corsi': 0, 'faceoff': 0, 'out': [], 'replacements': []}
+    a, b = rates(full), rates(tonight)
+    delta = lambda i: (b[i] - a[i]) if a[i] is not None and b[i] is not None else 0
+    return {
+        'corsi': delta(0), 'faceoff': delta(1),
+        'out': out_players,
+        'replacements': [p['name'] for p in tonight if p not in full],
     }
 
 
@@ -664,27 +787,40 @@ def nhl_lineup(espn_abbrev):
         return jsonify({'error': 'NHL lineup request failed: ' + str(e)}), 502
 
 
+# Early in a season a team's stats are a handful of games of noise (one game in, a team can show
+# 62% Corsi and a 0.000 win %). Blending in last season as if it were this many games of this
+# season fixed that in the backtest: games 3-10 went from 55.5% to 58.0% correct, log loss
+# 0.689 -> 0.673, with no cost later in the year (nhl_game_features_*.csv, K in 0..40 tested).
+NHL_PRIOR_SEASON_GAMES = 15
+NHL_BLEND_KEYS = ('corsiPct', 'goalDiffPerGame', 'winPct', 'zoneStartPct', 'powerPlayPct', 'netPenaltiesPer60', 'faceoffPct')
+
+
 @app.route('/api/nhl/team-summary/<path:team_name>')
 def nhl_team_summary(team_name):
-    """Same auto-fallback as NFL/CFB: current NHL season first, prior season if the current
-    one has no games yet (e.g. preseason)."""
+    """Current NHL season blended with last season (see NHL_PRIOR_SEASON_GAMES); falls back to
+    last season alone if the current one has no games yet. ?season= returns that season raw."""
     season_param = request.args.get('season')
     current = _current_nhl_season()
     prior = str(int(current[:4]) - 1) + current[:4]
-    seasons_to_try = [season_param] if season_param else [current, prior]
-
-    last_error = None
-    for season in seasons_to_try:
-        try:
-            result = _compute_nhl_team_summary(team_name, season)
-        except requests.RequestException as e:
-            last_error = e
-            continue
-        if result:
-            return jsonify(result)
-    if last_error:
-        return jsonify({'error': 'NHL stats request failed: ' + str(last_error)}), 502
-    return jsonify({'error': 'No games found for ' + team_name + ' in ' + ' or '.join(seasons_to_try)}), 404
+    try:
+        if season_param:
+            result = _compute_nhl_team_summary(team_name, season_param)
+        else:
+            cur = _compute_nhl_team_summary(team_name, current)
+            prev = _compute_nhl_team_summary(team_name, prior)
+            result = cur or prev
+            if cur and prev:
+                gp, k = cur['gamesPlayed'], NHL_PRIOR_SEASON_GAMES
+                for key in NHL_BLEND_KEYS:
+                    if cur.get(key) is not None and prev.get(key) is not None:
+                        result[key] = (gp * cur[key] + k * prev[key]) / (gp + k)
+                result['blendedWithSeason'] = prior
+                result['priorSeasonWeight'] = k / (gp + k)
+    except requests.RequestException as e:
+        return jsonify({'error': 'NHL stats request failed: ' + str(e)}), 502
+    if result:
+        return jsonify(result)
+    return jsonify({'error': 'No games found for ' + team_name + ' in ' + (season_param or current + ' or ' + prior)}), 404
 
 
 if __name__ == '__main__':

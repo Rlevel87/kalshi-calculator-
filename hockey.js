@@ -5,13 +5,15 @@
    matchup-context terms (home ice, back-to-back) read off ESPN's schedule.
    Weights are each signal's |r| with winning across 18,803 team-games
    (2018-19 to 2025-26, nhl_game_predictor_pipeline.py), with redundant stats
-   folded into one score each. Trade log / matchup data / accuracy tracking
+   folded into one score each, plus the starting goalie's shrunk save % (nhl_goalie_test.py).
+   Corsi/faceoffs can be adjusted for tonight's injuries from the lineup route. Trade log / matchup data / accuracy tracking
    mirror the football model.
    ======================================================================= */
 
 let lastCalc = null;
 let nhlTeamsCache = null;
 let lastFetchedSeason = { A: null, B: null }; // e.g. "20252026" -- which season each side's stats came from
+let injuryAdjust = { A: null, B: null }; // from the lineup route: { corsi, faceoff } deltas in percentage points, tonight vs full strength
 
 function $(id) { return document.getElementById(id); }
 function val(id) { return parseFloat($(id).value); }
@@ -176,6 +178,8 @@ async function fetchMatchup() {
     applyTeamBadge('A', teamA);
     applyTeamBadge('B', teamB);
 
+    injuryAdjust = { A: null, B: null };
+    ['A', 'B'].forEach(function (sd) { $('goalieSv' + sd).value = $('goalieSvMean').value; $('goalieSel' + sd).innerHTML = '<option value="">Loading…</option>'; });
     loadLineups(teamA, teamB); // separate from the stats so a slow lineup never holds up the model
 
     status.textContent = 'Fetching team season stats and schedule…';
@@ -191,8 +195,8 @@ async function fetchMatchup() {
     const missing = [!summaryA && teamA.displayName, !summaryB && teamB.displayName].filter(Boolean);
     status.textContent = (missing.length ? '⚠ No stats for ' + missing.join(' & ') + '. ' : '✓ ') +
       'Loaded ' + teamA.displayName + ' vs ' + teamB.displayName + '. Stats: ' +
-      (fmtSeason(lastFetchedSeason.A) || '?') + ' / ' + (fmtSeason(lastFetchedSeason.B) || '?') +
-      ' season (switches to the new season automatically once it has games). Context: ' + contextNote + '.';
+      (fmtSeason(lastFetchedSeason.A) || '?') + ' / ' + (fmtSeason(lastFetchedSeason.B) || '?') + ' season' +
+      blendNote(summaryA, summaryB) + '. Context: ' + contextNote + '.';
   } catch (err) {
     status.textContent = 'Fetch failed: ' + err.message;
   } finally {
@@ -234,6 +238,30 @@ function lineupBlockHtml(name, lu) {
   }
   return html + '</div>';
 }
+// Starting goalies are usually confirmed the morning of the game -- default to the healthy goalie
+// with the most starts and let the user switch to whoever's actually announced.
+let goalieOptions = { A: [], B: [] };
+function fillGoaliePicker(side, lu) {
+  const sel = $('goalieSel' + side);
+  goalieOptions[side] = (lu && lu.goalieOptions) || [];
+  sel.innerHTML = '';
+  goalieOptions[side].forEach(function (g, i) {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = g.name + (g.savePct ? ' — ' + (g.savePct * 100).toFixed(1) : '') + (g.inactive ? ' (' + g.injury + ')' : '') +
+      ' · ' + g.starts + ' GS';
+    sel.appendChild(o);
+  });
+  if (!goalieOptions[side].length) { sel.innerHTML = '<option value="">No goalies found</option>'; return; }
+  const healthy = goalieOptions[side].findIndex(function (g) { return !g.inactive; });
+  sel.value = String(healthy === -1 ? 0 : healthy);
+  applyGoalieChoice(side);
+}
+function applyGoalieChoice(side) {
+  const g = goalieOptions[side][parseInt($('goalieSel' + side).value, 10)];
+  if (g && g.savePct) $('goalieSv' + side).value = (g.savePct * 100).toFixed(2);
+}
+
 async function loadLineups(teamA, teamB) {
   const status = $('depthChartStatus');
   status.textContent = 'Loading lineups and injuries…';
@@ -245,9 +273,24 @@ async function loadLineups(teamA, teamB) {
   // A newer fetch may have started while this one was in flight -- don't overwrite it.
   if (txt('teamAName') !== teamA.displayName || txt('teamBName') !== teamB.displayName) return;
   $('depthChartGrid').innerHTML = lineupBlockHtml(teamA.displayName, luA) + lineupBlockHtml(teamB.displayName, luB);
+  const toPts = function (lu) {
+    const a = lu && lu.injuryAdjust;
+    return a ? { corsi: a.corsi * 100, faceoff: a.faceoff * 100, out: a.out || [], replacements: a.replacements || [] } : null;
+  };
+  injuryAdjust = { A: toPts(luA), B: toPts(luB) };
+  fillGoaliePicker('A', luA);
+  fillGoaliePicker('B', luB);
+  recalc();
   const note = (luA && luA.seasonNote) || (luB && luB.seasonNote) || '';
   status.textContent = (luA.error || luB.error ? '⚠ ' : '✓ ') + 'Lines estimated from average ice time (' + note +
     ') — not official line combos. Struck through = out (IR / suspended); yellow tag = day-to-day.';
+}
+
+// Early in a season the server blends in last season as 15 games' worth (backtested) -- say how much.
+function blendNote(a, b) {
+  const parts = [a, b].filter(function (x) { return x && x.priorSeasonWeight; })
+    .map(function (x) { return x.team.split(' ').pop() + ' ' + Math.round(x.priorSeasonWeight * 100) + '%'; });
+  return parts.length ? ', blended with last season (' + parts.join(', ') + ' last-season weight, fading as games are played)' : '';
 }
 
 // Server sends fractions (0.49); the page shows percentages (49.0) since that's how they're quoted.
@@ -265,20 +308,41 @@ function applyTeamSummaryToInputs(side, s) {
 }
 
 /* ---------------------------- team composite (Team Strength Index) + recalc ---------------------------- */
-const TSI_KEYS = ['Corsi', 'GoalDiff', 'WinPct', 'ZoneStart', 'Home', 'PowerPlay', 'NetPen', 'B2b', 'Faceoff'];
-const STAT_KEYS = ['Corsi', 'GoalDiff', 'WinPct', 'ZoneStart', 'PowerPlay', 'NetPen', 'Faceoff']; // per-team inputs
+const TSI_KEYS = ['Corsi', 'GoalDiff', 'WinPct', 'ZoneStart', 'Home', 'PowerPlay', 'GoalieSv', 'NetPen', 'B2b', 'Faceoff'];
+const STAT_KEYS = ['Corsi', 'GoalDiff', 'WinPct', 'ZoneStart', 'PowerPlay', 'GoalieSv', 'NetPen', 'Faceoff']; // per-team inputs
 const BASE_KEYS = ['corsiMean', 'corsiSd', 'goalDiffMean', 'goalDiffSd', 'winPctMean', 'winPctSd', 'zoneStartMean', 'zoneStartSd',
-  'powerPlayMean', 'powerPlaySd', 'netPenMean', 'netPenSd', 'faceoffMean', 'faceoffSd', 'homeZ', 'b2bZ'];
+  'powerPlayMean', 'powerPlaySd', 'goalieSvMean', 'goalieSvSd', 'netPenMean', 'netPenSd', 'faceoffMean', 'faceoffSd', 'homeZ', 'b2bZ'];
 function lowerFirst(k) { return k.charAt(0).toLowerCase() + k.slice(1); }
 
 // Home ice and back-to-back are indicators, not stats, so their "z" is a fitted magnitude
 // (homeZ / b2bZ in Advanced) rather than a (value - mean) / sd -- the calibration fit found
 // plain 0/1 indicators badly under-predicted both effects at these correlation-sized weights.
+// The season stat as entered, plus tonight's injury delta for the two stats the lineup route
+// can adjust (Corsi % and faceoff %) when the toggle is on.
+function statValue(key, side) {
+  const adj = injuryAdjust[side];
+  const delta = (adj && $('injuryAdjustOn').checked && adj[key] !== undefined) ? adj[key] : 0;
+  return val(key + side) + delta;
+}
+function renderInjuryAdjustNotes() {
+  ['A', 'B'].forEach(function (side) {
+    [['corsi', 'Corsi'], ['faceoff', 'Faceoff']].forEach(function (pair) {
+      const el = $('adj' + pair[1] + side);
+      const adj = injuryAdjust[side];
+      const d = adj ? adj[pair[0]] : 0;
+      if (!adj || !$('injuryAdjustOn').checked || Math.abs(d) < 0.005) { el.textContent = ''; el.title = ''; return; }
+      el.textContent = '→ ' + statValue(pair[0], side).toFixed(1) + ' tonight';
+      el.title = (d >= 0 ? '+' : '') + d.toFixed(2) + ' pts with ' + adj.out.join(', ') + ' out' +
+        (adj.replacements.length ? ' (' + adj.replacements.join(', ') + ' in)' : '');
+    });
+  });
+}
+
 function compositeTSI(side, w, base) {
   const contributions = {};
   STAT_KEYS.forEach(function (k) {
     const key = lowerFirst(k);
-    contributions[k] = w[k] * z(val(key + side), base[key + 'Mean'], base[key + 'Sd']);
+    contributions[k] = w[k] * z(statValue(key, side), base[key + 'Mean'], base[key + 'Sd']);
   });
   const homeSide = $('homeSide').value;
   contributions.Home = w.Home * (homeSide === side ? base.homeZ : (homeSide ? -base.homeZ : 0));
@@ -321,6 +385,7 @@ function recalc() {
   const resultB = compositeTSI('B', w, base);
   const impliedA = logistic(resultA.total, scale), impliedB = logistic(resultB.total, scale);
   const modelA = log5(impliedA, impliedB), modelB = 1 - modelA;
+  renderInjuryAdjustNotes();
   renderContribBadges('A', resultA.contributions);
   renderContribBadges('B', resultB.contributions);
 
@@ -377,8 +442,8 @@ function recalc() {
   };
   STAT_KEYS.forEach(function (k) {
     const key = lowerFirst(k);
-    lastCalc[key + 'A'] = val(key + 'A');
-    lastCalc[key + 'B'] = val(key + 'B');
+    lastCalc[key + 'A'] = statValue(key, 'A'); // what the model actually used (injury-adjusted if on)
+    lastCalc[key + 'B'] = statValue(key, 'B');
   });
 }
 
@@ -581,7 +646,7 @@ function renderLog() {
 /* ---------------------------- Matchup data & analysis ---------------------------- */
 const MATCHUP_DATA_KEY = 'kalshiNhlMatchupData';
 const STAT_LABELS = { Corsi: 'Corsi %', GoalDiff: 'Goal diff /gm', WinPct: 'Win %', ZoneStart: 'Zone start %',
-  PowerPlay: 'Power play %', NetPen: 'Net penalties /60', Faceoff: 'Faceoff %' };
+  PowerPlay: 'Power play %', GoalieSv: 'Starting goalie save %', NetPen: 'Net penalties /60', Faceoff: 'Faceoff %' };
 const TRACKED_STATS = STAT_KEYS.map(function (k) {
   return { key: lowerFirst(k), label: STAT_LABELS[k], higherBetter: true }; // every hockey input is higher-is-better
 }).concat([{ key: 'model', label: 'Model probability', higherBetter: true }, { key: 'market', label: 'Market probability', higherBetter: true }]);
@@ -760,6 +825,8 @@ function clearAllData() {
 // instead of wiring each field.
 document.addEventListener('input', function (e) { if (e.target.matches('input, select')) recalc(); });
 document.addEventListener('change', function (e) { if (e.target.matches('input[type="checkbox"], select')) recalc(); });
+$('goalieSelA').addEventListener('change', function () { applyGoalieChoice('A'); recalc(); });
+$('goalieSelB').addEventListener('change', function () { applyGoalieChoice('B'); recalc(); });
 $('teamAName').addEventListener('blur', function () { resolveAndBadge('A'); });
 $('teamBName').addEventListener('blur', function () { resolveAndBadge('B'); });
 $('gameDate').value = localIsoDate(new Date());

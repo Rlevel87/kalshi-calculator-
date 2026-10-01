@@ -182,6 +182,7 @@
   .depth-player.inactive { color: var(--neg); text-decoration: line-through; }
   .depth-toi { color: var(--ink-faint); font-size: 10.5px; margin-left: 3px; font-variant-numeric: tabular-nums; }
   .injury-tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 8px; background: var(--neg-bg); color: var(--neg); margin-left: 4px; }
+  .inj-adj { font-size: 11px; color: var(--neutral); font-variant-numeric: tabular-nums; }
   .injury-tag.dtd { background: rgba(201, 162, 75, 0.15); color: var(--neutral); }
 
   .hidden { display: none !important; }
@@ -280,7 +281,7 @@
     <div class="card team-a">
       <h2><span id="cardATitle">Team A &mdash; Season Stats</span></h2>
       <div class="row2">
-        <div class="field"><label for="corsiA">Corsi % (shot-attempt share) <span class="stat-contrib" id="contribCorsiA"></span></label><input type="number" id="corsiA" step="0.1" value="50"></div>
+        <div class="field"><label for="corsiA">Corsi % (shot-attempt share) <span class="stat-contrib" id="contribCorsiA"></span> <span class="inj-adj" id="adjCorsiA"></span></label><input type="number" id="corsiA" step="0.1" value="50"></div>
         <div class="field"><label for="goalDiffA">Goal diff /gm <span class="stat-contrib" id="contribGoalDiffA"></span></label><input type="number" id="goalDiffA" step="0.01" value="0"></div>
       </div>
       <div class="row2">
@@ -291,14 +292,18 @@
         <div class="field"><label for="powerPlayA">Power play % <span class="stat-contrib" id="contribPowerPlayA"></span></label><input type="number" id="powerPlayA" step="0.1" value="21"></div>
         <div class="field"><label for="netPenA">Net penalties /60 <span class="stat-contrib" id="contribNetPenA"></span></label><input type="number" id="netPenA" step="0.01" value="0"></div>
       </div>
-      <div class="field"><label for="faceoffA">Faceoff win % <span class="stat-contrib" id="contribFaceoffA"></span></label><input type="number" id="faceoffA" step="0.1" value="50"></div>
+      <div class="field"><label for="faceoffA">Faceoff win % <span class="stat-contrib" id="contribFaceoffA"></span> <span class="inj-adj" id="adjFaceoffA"></span></label><input type="number" id="faceoffA" step="0.1" value="50"></div>
+      <div class="row2">
+        <div class="field"><label for="goalieSelA">Starting goalie</label><select id="goalieSelA"><option value="">Fetch to load goalies</option></select></div>
+        <div class="field"><label for="goalieSvA">Goalie save % (adj.) <span class="stat-contrib" id="contribGoalieSvA"></span></label><input type="number" id="goalieSvA" step="0.01" value="89.60"></div>
+      </div>
       <div class="field"><label>Home ice <span class="stat-contrib" id="contribHomeA"></span></label></div>
     </div>
 
     <div class="card team-b">
       <h2><span id="cardBTitle">Team B &mdash; Season Stats</span></h2>
       <div class="row2">
-        <div class="field"><label for="corsiB">Corsi % (shot-attempt share) <span class="stat-contrib" id="contribCorsiB"></span></label><input type="number" id="corsiB" step="0.1" value="50"></div>
+        <div class="field"><label for="corsiB">Corsi % (shot-attempt share) <span class="stat-contrib" id="contribCorsiB"></span> <span class="inj-adj" id="adjCorsiB"></span></label><input type="number" id="corsiB" step="0.1" value="50"></div>
         <div class="field"><label for="goalDiffB">Goal diff /gm <span class="stat-contrib" id="contribGoalDiffB"></span></label><input type="number" id="goalDiffB" step="0.01" value="0"></div>
       </div>
       <div class="row2">
@@ -309,7 +314,11 @@
         <div class="field"><label for="powerPlayB">Power play % <span class="stat-contrib" id="contribPowerPlayB"></span></label><input type="number" id="powerPlayB" step="0.1" value="21"></div>
         <div class="field"><label for="netPenB">Net penalties /60 <span class="stat-contrib" id="contribNetPenB"></span></label><input type="number" id="netPenB" step="0.01" value="0"></div>
       </div>
-      <div class="field"><label for="faceoffB">Faceoff win % <span class="stat-contrib" id="contribFaceoffB"></span></label><input type="number" id="faceoffB" step="0.1" value="50"></div>
+      <div class="field"><label for="faceoffB">Faceoff win % <span class="stat-contrib" id="contribFaceoffB"></span> <span class="inj-adj" id="adjFaceoffB"></span></label><input type="number" id="faceoffB" step="0.1" value="50"></div>
+      <div class="row2">
+        <div class="field"><label for="goalieSelB">Starting goalie</label><select id="goalieSelB"><option value="">Fetch to load goalies</option></select></div>
+        <div class="field"><label for="goalieSvB">Goalie save % (adj.) <span class="stat-contrib" id="contribGoalieSvB"></span></label><input type="number" id="goalieSvB" step="0.01" value="89.60"></div>
+      </div>
       <div class="field"><label>Home ice <span class="stat-contrib" id="contribHomeB"></span></label></div>
     </div>
   </div>
@@ -317,6 +326,7 @@
   <!-- Lineups -->
   <div class="card" style="margin-top:18px;">
     <h2>Lineups &amp; Injuries</h2>
+    <label class="check-label" style="margin-bottom:10px;"><input type="checkbox" id="injuryAdjustOn" checked> Adjust Corsi % and faceoff % for players who are out tonight</label>
     <div class="fetch-status" id="depthChartStatus">Fetch live data above to load estimated lineups and injury designations.</div>
     <div class="depth-chart-grid" id="depthChartGrid"></div>
   </div>
@@ -327,17 +337,18 @@
 
     <div class="adv-sub">Team composite weights (auto-normalized to sum to 1) &mdash; set from each signal's correlation with
       winning across 18,803 team-games, 2018-19 to 2025-26 (nhl_game_predictor_pipeline.py in Documents\Python files),
-      redundant stats folded into one score each</div>
+      redundant stats folded into one score each; starting goalie added after it improved held-out log loss in 6 of 8 seasons (nhl_goalie_test.py)</div>
     <div class="adv-grid">
-      <div class="field"><label for="wCorsi">Corsi %</label><input type="number" id="wCorsi" step="0.001" value="0.170"></div>
-      <div class="field"><label for="wGoalDiff">Goal diff /gm</label><input type="number" id="wGoalDiff" step="0.001" value="0.167"></div>
-      <div class="field"><label for="wWinPct">Win %</label><input type="number" id="wWinPct" step="0.001" value="0.154"></div>
-      <div class="field"><label for="wZoneStart">Zone start %</label><input type="number" id="wZoneStart" step="0.001" value="0.144"></div>
-      <div class="field"><label for="wHome">Home ice</label><input type="number" id="wHome" step="0.001" value="0.102"></div>
-      <div class="field"><label for="wPowerPlay">Power play %</label><input type="number" id="wPowerPlay" step="0.001" value="0.090"></div>
-      <div class="field"><label for="wNetPen">Net penalties /60</label><input type="number" id="wNetPen" step="0.001" value="0.049"></div>
-      <div class="field"><label for="wB2b">Back-to-back</label><input type="number" id="wB2b" step="0.001" value="0.068"></div>
-      <div class="field"><label for="wFaceoff">Faceoff %</label><input type="number" id="wFaceoff" step="0.001" value="0.055"></div>
+      <div class="field"><label for="wCorsi">Corsi %</label><input type="number" id="wCorsi" step="0.001" value="0.156"></div>
+      <div class="field"><label for="wGoalDiff">Goal diff /gm</label><input type="number" id="wGoalDiff" step="0.001" value="0.153"></div>
+      <div class="field"><label for="wWinPct">Win %</label><input type="number" id="wWinPct" step="0.001" value="0.142"></div>
+      <div class="field"><label for="wZoneStart">Zone start %</label><input type="number" id="wZoneStart" step="0.001" value="0.133"></div>
+      <div class="field"><label for="wHome">Home ice</label><input type="number" id="wHome" step="0.001" value="0.094"></div>
+      <div class="field"><label for="wPowerPlay">Power play %</label><input type="number" id="wPowerPlay" step="0.001" value="0.083"></div>
+      <div class="field"><label for="wNetPen">Net penalties /60</label><input type="number" id="wNetPen" step="0.001" value="0.046"></div>
+      <div class="field"><label for="wB2b">Back-to-back</label><input type="number" id="wB2b" step="0.001" value="0.063"></div>
+      <div class="field"><label for="wGoalieSv">Starting goalie save %</label><input type="number" id="wGoalieSv" step="0.001" value="0.080"></div>
+      <div class="field"><label for="wFaceoff">Faceoff %</label><input type="number" id="wFaceoff" step="0.001" value="0.050"></div>
     </div>
 
     <div class="adv-sub">League baselines (mean / SD for z-scores &mdash; 2025-26 team season totals) and calibration
@@ -357,6 +368,8 @@
       <div class="field"><label for="netPenSd">Net penalties /60 SD</label><input type="number" id="netPenSd" step="0.001" value="0.251"></div>
       <div class="field"><label for="faceoffMean">Faceoff % mean</label><input type="number" id="faceoffMean" step="0.01" value="50.01"></div>
       <div class="field"><label for="faceoffSd">Faceoff % SD</label><input type="number" id="faceoffSd" step="0.01" value="2.35"></div>
+      <div class="field"><label for="goalieSvMean">Goalie save % mean</label><input type="number" id="goalieSvMean" step="0.01" value="89.60"></div>
+      <div class="field"><label for="goalieSvSd">Goalie save % SD</label><input type="number" id="goalieSvSd" step="0.01" value="0.78"></div>
       <div class="field"><label for="homeZ">Home ice z (home +, away &minus;)</label><input type="number" id="homeZ" step="0.1" value="2"></div>
       <div class="field"><label for="b2bZ">Back-to-back z (penalty)</label><input type="number" id="b2bZ" step="0.1" value="6"></div>
       <div class="field"><label for="scale">Confidence dampening</label><input type="number" id="scale" step="0.1" value="6.0"></div>
