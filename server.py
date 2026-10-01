@@ -1,7 +1,7 @@
 """
 Kalshi Value Models -- server.
 
-Serves the static frontend (index.html, value_model.html, football.html) AND
+Serves the static frontend (index.html, value_model.html, football.html, hockey.html) AND
 proxies the football model's data sources, neither of which support CORS so
 neither can be called directly from the browser like MLB Stats API is for
 the baseball model:
@@ -21,6 +21,7 @@ import csv
 import io
 import json
 import time
+import unicodedata
 import concurrent.futures
 from datetime import datetime
 from flask import Flask, request, jsonify, Response, send_from_directory
@@ -39,6 +40,9 @@ NFLVERSE_STATS_TEAM = 'https://github.com/nflverse/nflverse-data/releases/downlo
 NFLVERSE_SCHEDULES = 'https://github.com/nflverse/nflverse-data/releases/download/schedules'
 
 CFBD_API = 'https://api.collegefootballdata.com'
+
+ESPN_NHL_SITE_API = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl'
+NHL_STATS_API = 'https://api.nhle.com/stats/rest/en/team'
 
 
 def _load_cfbd_key():
@@ -357,6 +361,11 @@ def cfb_team_summary(team):
     return jsonify({'error': 'No games found for ' + team + ' in ' + ' or '.join(seasons_to_try)}), 404
 
 
+# The frontend resolves teams through ESPN, whose abbreviations differ from nflverse's for
+# exactly these two teams -- without this the Rams and Commanders silently got no team stats.
+ESPN_TO_NFLVERSE_TEAM = {'LAR': 'LA', 'WSH': 'WAS'}
+
+
 @app.route('/api/nfl/team-summary/<team>')
 def team_summary(team):
     """
@@ -371,6 +380,7 @@ def team_summary(team):
     then switch over on their own with no code change needed.
     """
     team = team.upper()
+    team = ESPN_TO_NFLVERSE_TEAM.get(team, team)
     season_param = request.args.get('season')
     current = _current_nfl_season()
     seasons_to_try = [season_param] if season_param else [current, str(int(current) - 1)]
@@ -390,6 +400,100 @@ def team_summary(team):
     if last_error:
         return jsonify({'error': 'nflverse request failed: ' + str(last_error)}), 502
     return jsonify({'error': 'No games found for ' + team + ' in ' + ' or '.join(seasons_to_try)}), 404
+
+
+# ---------------------------------------------------------------- hockey (ESPN + NHL stats API)
+
+@app.route('/api/espn/nhl-site/<path:subpath>')
+def espn_nhl_site_proxy(subpath):
+    return _proxy_get(ESPN_NHL_SITE_API, subpath)
+
+
+def _current_nhl_season():
+    """NHL seasonIds span two years (20252026). The regular season opens in October, so
+    September onward belongs to the season starting that year."""
+    now = datetime.utcnow()
+    start = now.year if now.month >= 9 else now.year - 1
+    return str(start) + str(start + 1)
+
+
+def _nhl_report_rows(report, season):
+    """One league-wide NHL stats report for a season (all 32 teams in one call), cached."""
+    cache_key = 'nhl:' + report + ':' + season
+    cached = _cache.get(cache_key)
+    if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
+        return cached['data']
+    r = requests.get(
+        NHL_STATS_API + '/' + report,
+        params={'cayenneExp': 'seasonId=' + season + ' and gameTypeId=2'},
+        timeout=REQUEST_TIMEOUT,
+    )
+    r.raise_for_status()
+    rows = r.json().get('data') or []
+    _cache[cache_key] = {'data': rows, 'fetched_at': time.time()}
+    return rows
+
+
+def _norm_team_name(name):
+    # ESPN says "Montreal Canadiens", the NHL API says "Montréal Canadiens".
+    return unicodedata.normalize('NFKD', name or '').encode('ascii', 'ignore').decode().lower().strip()
+
+
+def _compute_nhl_team_summary(team_name, season):
+    """The 7 team-level terms of the hockey composite (home ice and back-to-back are matchup
+    context, set on the page). Only 3 league-wide calls, shared across every team via cache."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+        summary_f = ex.submit(_nhl_report_rows, 'summary', season)
+        pct_f = ex.submit(_nhl_report_rows, 'percentages', season)
+        pen_f = ex.submit(_nhl_report_rows, 'penalties', season)
+        summary, pct, pen = summary_f.result(), pct_f.result(), pen_f.result()
+
+    target = _norm_team_name(team_name)
+
+    def find(rows):
+        return next((r for r in rows if _norm_team_name(r.get('teamFullName')) == target), None)
+
+    s, p, n = find(summary), find(pct), find(pen)
+    if not s or not s.get('gamesPlayed'):
+        return None
+    gp = s['gamesPlayed']
+    p, n = p or {}, n or {}
+    drawn, taken = n.get('penaltiesDrawnPer60'), n.get('penaltiesTakenPer60')
+    return {
+        'team': s.get('teamFullName'),
+        'season': season,
+        'gamesPlayed': gp,
+        'corsiPct': p.get('satPct'),
+        'goalDiffPerGame': ((s.get('goalsFor') or 0) - (s.get('goalsAgainst') or 0)) / gp,
+        'winPct': (s.get('wins') or 0) / gp,
+        'zoneStartPct': p.get('zoneStartPct5v5'),
+        'powerPlayPct': s.get('powerPlayPct'),
+        'netPenaltiesPer60': (drawn - taken) if drawn is not None and taken is not None else None,
+        'faceoffPct': s.get('faceoffWinPct'),
+    }
+
+
+@app.route('/api/nhl/team-summary/<path:team_name>')
+def nhl_team_summary(team_name):
+    """Same auto-fallback as NFL/CFB: current NHL season first, prior season if the current
+    one has no games yet (e.g. preseason)."""
+    season_param = request.args.get('season')
+    current = _current_nhl_season()
+    prior = str(int(current[:4]) - 1) + current[:4]
+    seasons_to_try = [season_param] if season_param else [current, prior]
+
+    last_error = None
+    for season in seasons_to_try:
+        try:
+            result = _compute_nhl_team_summary(team_name, season)
+        except requests.RequestException as e:
+            last_error = e
+            continue
+        if result:
+            return jsonify(result)
+    if last_error:
+        return jsonify({'error': 'NHL stats request failed: ' + str(last_error)}), 502
+    return jsonify({'error': 'No games found for ' + team_name + ' in ' + ' or '.join(seasons_to_try)}), 404
 
 
 if __name__ == '__main__':
