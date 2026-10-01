@@ -169,6 +169,21 @@
   .hold-delete-btn .hold-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--neg); opacity: 0.55; pointer-events: none; }
   .hold-delete-btn .hold-label { position: relative; }
 
+  /* ---------------- Lineups ---------------- */
+  .depth-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 780px) { .depth-chart-grid { grid-template-columns: 1fr; } }
+  .depth-chart-grid h3 { margin: 14px 0 8px; font-size: 13px; color: var(--ink-muted); }
+  .depth-chart-grid h3:first-child { margin-top: 0; }
+  .depth-pos-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; flex-wrap: wrap; }
+  .depth-pos-label { width: 34px; flex-shrink: 0; color: var(--ink-muted); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+  .depth-slot { color: var(--ink-faint); font-size: 10.5px; margin-right: 2px; }
+  .depth-player { padding: 2px 4px; border-radius: 4px; color: var(--ink); }
+  .depth-player.backup { color: var(--ink-faint); }
+  .depth-player.inactive { color: var(--neg); text-decoration: line-through; }
+  .depth-toi { color: var(--ink-faint); font-size: 10.5px; margin-left: 3px; font-variant-numeric: tabular-nums; }
+  .injury-tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 8px; background: var(--neg-bg); color: var(--neg); margin-left: 4px; }
+  .injury-tag.dtd { background: rgba(201, 162, 75, 0.15); color: var(--neutral); }
+
   .hidden { display: none !important; }
 
   @media (max-width: 780px) {
@@ -297,6 +312,13 @@
       <div class="field"><label for="faceoffB">Faceoff win % <span class="stat-contrib" id="contribFaceoffB"></span></label><input type="number" id="faceoffB" step="0.1" value="50"></div>
       <div class="field"><label>Home ice <span class="stat-contrib" id="contribHomeB"></span></label></div>
     </div>
+  </div>
+
+  <!-- Lineups -->
+  <div class="card" style="margin-top:18px;">
+    <h2>Lineups &amp; Injuries</h2>
+    <div class="fetch-status" id="depthChartStatus">Fetch live data above to load estimated lineups and injury designations.</div>
+    <div class="depth-chart-grid" id="depthChartGrid"></div>
   </div>
 
   <!-- Advanced settings -->

@@ -43,6 +43,7 @@ CFBD_API = 'https://api.collegefootballdata.com'
 
 ESPN_NHL_SITE_API = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl'
 NHL_STATS_API = 'https://api.nhle.com/stats/rest/en/team'
+NHL_WEB_API = 'https://api-web.nhle.com/v1'
 
 
 def _load_cfbd_key():
@@ -471,6 +472,196 @@ def _compute_nhl_team_summary(team_name, season):
         'netPenaltiesPer60': (drawn - taken) if drawn is not None and taken is not None else None,
         'faceoffPct': s.get('faceoffWinPct'),
     }
+
+
+# ESPN abbreviations that differ from the NHL's own (everything else matches).
+ESPN_TO_NHL_TEAM = {'LA': 'LAK', 'NJ': 'NJD', 'SJ': 'SJS', 'TB': 'TBL', 'UTAH': 'UTA'}
+NHL_INACTIVE_STATUSES = {'out', 'injured reserve', 'long-term injured reserve', 'ltir', 'ir', 'suspension', 'suspended'}
+MIN_GP_FOR_CURRENT_TOI = 5  # fewer games than this this season -> rank by last season's ice time instead
+
+
+def _nhl_web_get(path):
+    cache_key = 'nhlweb:' + path
+    cached = _cache.get(cache_key)
+    if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
+        return cached['data']
+    r = requests.get(NHL_WEB_API + '/' + path, timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    _cache[cache_key] = {'data': data, 'fetched_at': time.time()}
+    return data
+
+
+def _player_name(p):
+    return ((p.get('firstName') or {}).get('default', '') + ' ' + (p.get('lastName') or {}).get('default', '')).strip()
+
+
+def _espn_team_injuries(espn_abbrev):
+    """normalized player name -> {status, detail}. Pulled from the team's own ESPN roster
+    (carries IR/suspension designations) with the league-wide injuries feed layered under it
+    for day-to-day notes -- same roster-wins merge as the football page."""
+    out = {}
+    roster = requests.get(ESPN_NHL_SITE_API + '/teams/' + espn_abbrev.lower() + '/roster', timeout=REQUEST_TIMEOUT).json()
+    team_id = str((roster.get('team') or {}).get('id'))
+    try:
+        feed = requests.get(ESPN_NHL_SITE_API + '/injuries', timeout=REQUEST_TIMEOUT).json()
+        for team_group in feed.get('injuries') or []:
+            if str(team_group.get('id')) != team_id:  # names aren't unique league-wide (two Sebastian Ahos)
+                continue
+            for inj in team_group.get('injuries') or []:
+                name = (inj.get('athlete') or {}).get('displayName')
+                if name:
+                    out[_norm_team_name(name)] = {'status': inj.get('status') or 'Injured', 'detail': inj.get('shortComment')}
+    except (requests.RequestException, ValueError):
+        pass
+    for group in roster.get('athletes') or []:
+        for p in group.get('items') or []:
+            injuries = p.get('injuries') or []
+            if injuries:
+                latest = sorted(injuries, key=lambda i: i.get('date') or '', reverse=True)[0]
+                key = _norm_team_name(p.get('displayName'))
+                out[key] = {'status': latest.get('status') or 'Injured', 'detail': (out.get(key) or {}).get('detail')}
+    return out
+
+
+def _compute_nhl_lineup(espn_abbrev):
+    """Estimated lineup ranked by average ice time -- the NHL publishes no official line
+    combinations, and ESPN's hockey depth-chart endpoint is empty. Injured regulars keep the
+    slot their ice time earned them (struck through on the page) instead of quietly being
+    replaced by whoever is filling in."""
+    abbrev = ESPN_TO_NHL_TEAM.get(espn_abbrev.upper(), espn_abbrev.upper())
+    current = _current_nhl_season()
+    prior = str(int(current[:4]) - 1) + current[:4]
+
+    def club_stats(season):
+        try:
+            return _nhl_web_get('club-stats/' + abbrev + '/' + season + '/2')
+        except requests.RequestException:
+            return {'skaters': [], 'goalies': []}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        roster_f = ex.submit(_nhl_web_get, 'roster/' + abbrev + '/current')
+        cur_f, prior_f = ex.submit(club_stats, current), ex.submit(club_stats, prior)
+        inj_f = ex.submit(_espn_team_injuries, espn_abbrev)
+        roster, cur, prev = roster_f.result(), cur_f.result(), prior_f.result()
+        try:
+            injuries = inj_f.result()
+        except (requests.RequestException, ValueError):
+            injuries = {}
+
+    cur_sk = {s['playerId']: s for s in cur.get('skaters') or []}
+    prev_sk = {s['playerId']: s for s in prev.get('skaters') or []}
+    cur_g = {g['playerId']: g for g in cur.get('goalies') or []}
+    prev_g = {g['playerId']: g for g in prev.get('goalies') or []}
+
+    players = {}  # playerId -> {name, pos}
+    for group, default_pos in (('forwards', 'F'), ('defensemen', 'D'), ('goalies', 'G')):
+        for p in roster.get(group) or []:
+            players[p['id']] = {'name': _player_name(p), 'pos': p.get('positionCode') or default_pos}
+    # Players on IR fall off the NHL's "current" roster -- add back anyone who's logged time
+    # for this team and is on the injury list, so an injured regular keeps his spot.
+    for pool, is_goalie in ((cur_sk, False), (prev_sk, False), (cur_g, True), (prev_g, True)):
+        for pid, s in pool.items():
+            name = _player_name(s)
+            if pid not in players and _norm_team_name(name) in injuries:
+                players[pid] = {'name': name, 'pos': 'G' if is_goalie else s.get('positionCode') or 'F'}
+
+    def tag(p):
+        inj = injuries.get(_norm_team_name(p['name']))
+        p['injury'] = inj['status'] if inj else None
+        p['injuryDetail'] = inj['detail'] if inj else None
+        p['inactive'] = bool(inj) and inj['status'].lower() in NHL_INACTIVE_STATUSES
+        return p
+
+    def skater_toi(pid):
+        s = cur_sk.get(pid)
+        if s and s.get('gamesPlayed', 0) >= MIN_GP_FOR_CURRENT_TOI:
+            return s.get('avgTimeOnIcePerGame') or 0
+        s = prev_sk.get(pid) or s
+        return (s or {}).get('avgTimeOnIcePerGame') or 0
+
+    def goalie_starts(pid):
+        g = cur_g.get(pid)
+        if g and g.get('gamesPlayed', 0) >= MIN_GP_FOR_CURRENT_TOI:
+            return g.get('gamesStarted') or 0
+        return ((prev_g.get(pid) or g) or {}).get('gamesStarted') or 0
+
+    def last_nhl_season_rows(pid):
+        """Newcomers have no history with THIS team yet -- fall back to their most recent NHL
+        regular season with any team (all rows of it, in case they were traded mid-season)."""
+        try:
+            totals = _nhl_web_get('player/' + str(pid) + '/landing').get('seasonTotals') or []
+        except requests.RequestException:
+            return []
+        nhl = [s for s in totals if s.get('leagueAbbrev') == 'NHL' and s.get('gameTypeId') == 2]
+        if not nhl:
+            return []
+        last = max(s['season'] for s in nhl)
+        return [s for s in nhl if s['season'] == last]
+
+    def career_toi(pid):
+        rows = [r for r in last_nhl_season_rows(pid) if r.get('avgToi')]
+        secs = lambda t: int(t.split(':')[0]) * 60 + int(t.split(':')[1])
+        gp = sum(r.get('gamesPlayed') or 0 for r in rows)
+        return sum(secs(r['avgToi']) * (r.get('gamesPlayed') or 0) for r in rows) / gp if gp else 0
+
+    def career_starts(pid):
+        return sum(r.get('gamesStarted') or 0 for r in last_nhl_season_rows(pid))
+
+    skater_ids = [pid for pid, p in players.items() if p['pos'] != 'G']
+    toi = {pid: skater_toi(pid) for pid in skater_ids}
+    newcomers = [pid for pid in skater_ids if not toi[pid]]
+    if newcomers:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+            for pid, t in zip(newcomers, ex.map(career_toi, newcomers)):
+                toi[pid] = t
+
+    skaters = [tag(dict(players[pid], id=pid, toi=round(toi[pid] / 60, 1))) for pid in skater_ids]
+    skaters.sort(key=lambda p: -p['toi'])
+    forwards = [p for p in skaters if p['pos'] in ('C', 'L', 'R', 'F')]
+    defense = [p for p in skaters if p['pos'] == 'D']
+
+    # Top 12 forwards by ice time, 3 per line in rank order (so line 1 really is the 3 most-used
+    # forwards). Within each trio, natural C / LW / RW take their own slot first and anyone left
+    # fills the open one(s) -- plenty of centers play wing.
+    top12, lines = forwards[:12], []
+    for i in range(0, len(top12), 3):
+        trio, line = list(top12[i:i + 3]), {}
+        for slot, code in (('C', 'C'), ('LW', 'L'), ('RW', 'R')):
+            pick = next((p for p in trio if p['pos'] == code), None)
+            if pick:
+                line[slot] = pick
+                trio.remove(pick)
+        for slot in ('C', 'LW', 'RW'):
+            if slot not in line and trio:
+                line[slot] = trio.pop(0)
+        lines.append(line)
+
+    goalie_ids = [pid for pid, p in players.items() if p['pos'] == 'G']
+    starts = {pid: goalie_starts(pid) for pid in goalie_ids}
+    for pid in goalie_ids:
+        if not starts[pid]:
+            starts[pid] = career_starts(pid)
+    goalies = [tag(dict(players[pid], id=pid, starts=starts[pid])) for pid in goalie_ids]
+    goalies.sort(key=lambda g: -g['starts'])
+
+    return {
+        'team': abbrev,
+        'forwardLines': lines,
+        'defensePairs': [defense[i:i + 2] for i in range(0, min(len(defense), 6), 2)],
+        'goalies': goalies[:2],
+        'extras': [p for p in forwards if p not in top12] + defense[6:],
+        'seasonNote': 'ranked by ' + current[:4] + '-' + current[6:] + ' ice time once a player has '
+                      + str(MIN_GP_FOR_CURRENT_TOI) + '+ games, else ' + prior[:4] + '-' + prior[6:],
+    }
+
+
+@app.route('/api/nhl/lineup/<espn_abbrev>')
+def nhl_lineup(espn_abbrev):
+    try:
+        return jsonify(_compute_nhl_lineup(espn_abbrev))
+    except requests.RequestException as e:
+        return jsonify({'error': 'NHL lineup request failed: ' + str(e)}), 502
 
 
 @app.route('/api/nhl/team-summary/<path:team_name>')

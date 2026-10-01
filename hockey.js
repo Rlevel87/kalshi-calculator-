@@ -176,6 +176,8 @@ async function fetchMatchup() {
     applyTeamBadge('A', teamA);
     applyTeamBadge('B', teamB);
 
+    loadLineups(teamA, teamB); // separate from the stats so a slow lineup never holds up the model
+
     status.textContent = 'Fetching team season stats and schedule…';
     const [summaryA, summaryB, contextNote] = await Promise.all([
       teamSummaryGet(teamA.displayName).catch(function () { return null; }),
@@ -196,6 +198,56 @@ async function fetchMatchup() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ---------------------------- lineups + injuries ---------------------------- */
+// Estimated from season ice time server-side (the NHL publishes no official line combinations
+// and ESPN's hockey depth chart is empty). An injured regular keeps the slot his minutes earned,
+// struck through, rather than being silently replaced by whoever is filling in.
+const DTD_STATUSES = ['day-to-day', 'questionable', 'probable'];
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function playerHtml(p, slot, extraClass) {
+  if (!p) return slot ? '<span class="depth-slot">' + slot + '</span><span class="depth-player backup">—</span>' : '';
+  const cls = p.inactive ? 'inactive' : (extraClass || '');
+  const tagCls = p.injury && DTD_STATUSES.indexOf(p.injury.toLowerCase()) !== -1 ? 'injury-tag dtd' : 'injury-tag';
+  const tag = p.injury ? '<span class="' + tagCls + '" title="' + escapeHtml(p.injuryDetail || '') + '">' + escapeHtml(p.injury) + '</span>' : '';
+  const stat = p.starts !== undefined ? p.starts + ' GS' : (p.toi ? p.toi.toFixed(1) + ' min' : '');
+  return (slot ? '<span class="depth-slot">' + slot + '</span>' : '') +
+    '<span class="depth-player ' + cls + '">' + escapeHtml(p.name) + '</span>' +
+    (stat ? '<span class="depth-toi">' + stat + '</span>' : '') + tag;
+}
+function lineupBlockHtml(name, lu) {
+  if (!lu || lu.error) return '<div><h3>' + escapeHtml(name) + '</h3><div class="fetch-status">Lineup unavailable' + (lu && lu.error ? ': ' + escapeHtml(lu.error) : '') + '.</div></div>';
+  const row = function (label, inner) { return '<div class="depth-pos-row"><span class="depth-pos-label">' + label + '</span>' + inner + '</div>'; };
+  let html = '<div><h3>' + escapeHtml(name) + ' &mdash; Forwards</h3>';
+  lu.forwardLines.forEach(function (line, i) {
+    html += row('L' + (i + 1), ['LW', 'C', 'RW'].map(function (s) { return playerHtml(line[s], s); }).join(' &middot; '));
+  });
+  html += '<h3>Defense</h3>';
+  lu.defensePairs.forEach(function (pair, i) {
+    html += row('D' + (i + 1), pair.map(function (p) { return playerHtml(p); }).join(' &middot; '));
+  });
+  html += '<h3>Goalies</h3>';
+  html += row('G', lu.goalies.map(function (g, i) { return playerHtml(g, i === 0 ? 'Starter' : 'Backup', i === 0 ? '' : 'backup'); }).join(' &middot; '));
+  if (lu.extras && lu.extras.length) {
+    html += row('Ext', lu.extras.map(function (p) { return playerHtml(p, null, 'backup'); }).join(' &middot; '));
+  }
+  return html + '</div>';
+}
+async function loadLineups(teamA, teamB) {
+  const status = $('depthChartStatus');
+  status.textContent = 'Loading lineups and injuries…';
+  $('depthChartGrid').innerHTML = '';
+  const get = function (t) {
+    return fetchJson('/api/nhl/lineup/' + encodeURIComponent(t.abbreviation)).catch(function (err) { return { error: err.message }; });
+  };
+  const [luA, luB] = await Promise.all([get(teamA), get(teamB)]);
+  // A newer fetch may have started while this one was in flight -- don't overwrite it.
+  if (txt('teamAName') !== teamA.displayName || txt('teamBName') !== teamB.displayName) return;
+  $('depthChartGrid').innerHTML = lineupBlockHtml(teamA.displayName, luA) + lineupBlockHtml(teamB.displayName, luB);
+  const note = (luA && luA.seasonNote) || (luB && luB.seasonNote) || '';
+  status.textContent = (luA.error || luB.error ? '⚠ ' : '✓ ') + 'Lines estimated from average ice time (' + note +
+    ') — not official line combos. Struck through = out (IR / suspended); yellow tag = day-to-day.';
 }
 
 // Server sends fractions (0.49); the page shows percentages (49.0) since that's how they're quoted.
