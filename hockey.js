@@ -179,6 +179,7 @@ async function fetchMatchup() {
     applyTeamBadge('B', teamB);
 
     injuryAdjust = { A: null, B: null };
+    $('recordStatus').textContent = '';
     ['A', 'B'].forEach(function (sd) { $('goalieSv' + sd).value = $('goalieSvMean').value; $('goalieSel' + sd).innerHTML = '<option value="">Loading…</option>'; });
     loadLineups(teamA, teamB); // separate from the stats so a slow lineup never holds up the model
 
@@ -674,6 +675,9 @@ function recordMatchup() {
   entries.push(entry);
   saveMatchupData(entries);
   renderMatchupData();
+  // The matchup table is at the bottom of the page, so confirm up top too.
+  $('recordStatus').textContent = '✓ Recorded ' + entry.nameA + ' vs ' + entry.nameB + ' (' + date + ') — ' +
+    entries.length + ' matchup' + (entries.length === 1 ? '' : 's') + ' recorded.';
 }
 function exportMatchupData() { downloadJson(loadMatchupData(), 'kalshi-nhl-matchup-data-' + localIsoDate(new Date()) + '.json'); }
 function importMatchupData(event) { importJsonMerge(event, loadMatchupData, saveMatchupData, renderMatchupData, 'matchup data'); }
