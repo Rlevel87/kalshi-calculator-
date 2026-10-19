@@ -17,6 +17,7 @@ MLB's Stats API directly from the browser exactly as before. This server is
 purely additive for football.
 """
 import os
+import re
 import csv
 import io
 import json
@@ -821,6 +822,208 @@ def nhl_team_summary(team_name):
     if result:
         return jsonify(result)
     return jsonify({'error': 'No games found for ' + team_name + ' in ' + (season_param or current + ' or ' + prior)}), 404
+
+
+# ---------------------------------------------------------------- basketball (ESPN)
+# Model and constants come from nba_signal_selection.py (Documents\Python files): point
+# differential, missing rotation minutes and back-to-back were the only signals that improved
+# held-out log loss once redundant stats were folded together.
+
+ESPN_NBA_SITE_API = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
+ESPN_NBA_WEB_API = 'https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba'
+NBA_PRIOR_SEASON_GAMES = 10  # last season counts as this many games early on (backtested: games 3-10 63.4% -> 65.0%)
+NBA_ROTATION_MPG, NBA_ROTATION_MIN_GP = 15, 5  # same rotation definition the backtest used
+NBA_INACTIVE_STATUSES = {'out', 'injured reserve', 'suspension', 'suspended', 'doubtful'}
+NBA_POSITIONS = ('pg', 'sg', 'sf', 'pf', 'c')
+
+
+@app.route('/api/espn/nba-site/<path:subpath>')
+def espn_nba_site_proxy(subpath):
+    return _proxy_get(ESPN_NBA_SITE_API, subpath)
+
+
+def _current_nba_season():
+    """ESPN labels NBA seasons by the year they END (2025-26 -> 2026). Opening night is late
+    October, so October onward belongs to next year's label."""
+    now = datetime.utcnow()
+    return now.year + 1 if now.month >= 10 else now.year
+
+
+def _cached_json(cache_key, url, params=None, timeout=REQUEST_TIMEOUT):
+    cached = _cache.get(cache_key)
+    if cached and (time.time() - cached['fetched_at']) < CACHE_TTL:
+        return cached['data']
+    r = requests.get(url, params=params, timeout=timeout)
+    r.raise_for_status()
+    data = r.json()
+    _cache[cache_key] = {'data': data, 'fetched_at': time.time()}
+    return data
+
+
+def _nba_team_results(abbrev, season):
+    """Completed regular-season games for one team: games, wins, point diff per game."""
+    data = _cached_json('nbasched:%s:%s' % (abbrev, season), ESPN_NBA_SITE_API + '/teams/' + abbrev.lower() + '/schedule',
+                        {'season': season, 'seasontype': 2})
+    team_id = str((data.get('team') or {}).get('id'))
+    gp = wins = margin = 0
+    for e in data.get('events') or []:
+        comp = (e.get('competitions') or [{}])[0]
+        if not ((comp.get('status') or {}).get('type') or {}).get('completed'):
+            continue
+        me = next((c for c in comp.get('competitors') or [] if str(c.get('id') or (c.get('team') or {}).get('id')) == team_id), None)
+        them = next((c for c in comp.get('competitors') or [] if c is not me), None)
+        if not me or not them:
+            continue
+        score = lambda c: float((c.get('score') or {}).get('value') if isinstance(c.get('score'), dict) else c.get('score') or 0)
+        gp += 1
+        wins += 1 if me.get('winner') else 0
+        margin += score(me) - score(them)
+    return {'gamesPlayed': gp, 'wins': wins, 'pointDiffPerGame': margin / gp if gp else None}
+
+
+@app.route('/api/nba/team-summary/<abbrev>')
+def nba_team_summary(abbrev):
+    """This season's point differential blended with last season's (NBA_PRIOR_SEASON_GAMES),
+    plus the raw records for display."""
+    season = _current_nba_season()
+    try:
+        cur = _nba_team_results(abbrev, season)
+        prev = _nba_team_results(abbrev, season - 1)
+    except requests.RequestException as e:
+        return jsonify({'error': 'ESPN schedule request failed: ' + str(e)}), 502
+    gp, k = cur['gamesPlayed'], NBA_PRIOR_SEASON_GAMES
+    if gp and prev['gamesPlayed']:
+        pdiff = (gp * cur['pointDiffPerGame'] + k * prev['pointDiffPerGame']) / (gp + k)
+        prior_weight = k / (gp + k)
+    elif gp:
+        pdiff, prior_weight = cur['pointDiffPerGame'], 0
+    elif prev['gamesPlayed']:
+        pdiff, prior_weight = prev['pointDiffPerGame'], 1
+    else:
+        return jsonify({'error': 'No games found for ' + abbrev}), 404
+    return jsonify({
+        'team': abbrev.upper(), 'season': season, 'pointDiffPerGame': pdiff, 'priorSeasonWeight': prior_weight,
+        'current': cur, 'previous': prev,
+    })
+
+
+def _nba_player_minutes(season):
+    """playerId -> {gp, mpg, ppg} for every NBA player in a season, one ESPN call, cached."""
+    data = _cached_json('nbaplayers:%s' % season, ESPN_NBA_WEB_API + '/statistics/byathlete',
+                        {'season': season, 'seasontype': 2, 'limit': 1000}, timeout=30)
+    names = {c['name']: c.get('names') or [] for c in data.get('categories') or []}
+    out = {}
+    for a in data.get('athletes') or []:
+        vals = {c['name']: dict(zip(names.get(c['name'], []), c.get('totals') or [])) for c in a.get('categories') or []}
+        num = lambda v: float(v) if v not in (None, '', '-') else 0.0
+        out[str(a['athlete']['id'])] = {
+            'gp': num(vals.get('general', {}).get('gamesPlayed')),
+            'mpg': num(vals.get('general', {}).get('avgMinutes')),
+            'ppg': num(vals.get('offensive', {}).get('avgPoints')),
+        }
+    return out
+
+
+def _nba_team_injuries(abbrev, team_id):
+    """ESPN athlete id -> {status, detail}: the team's own roster designations layered over the
+    league-wide injury feed (filtered to this team by id -- names aren't unique)."""
+    out = {}
+    try:
+        feed = requests.get(ESPN_NBA_SITE_API + '/injuries', timeout=REQUEST_TIMEOUT).json()
+        for group in feed.get('injuries') or []:
+            if str(group.get('id')) != str(team_id):
+                continue
+            for inj in group.get('injuries') or []:
+                aid = None
+                for link in (inj.get('athlete') or {}).get('links') or []:
+                    m = re.search(r'/id/(\d+)', link.get('href') or '')
+                    if m:
+                        aid = m.group(1)
+                        break
+                if aid:
+                    out[aid] = {'status': inj.get('status') or 'Injured', 'detail': inj.get('shortComment')}
+    except (requests.RequestException, ValueError):
+        pass
+    return out
+
+
+def _compute_nba_lineup(abbrev):
+    season = _current_nba_season()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        depth_f = ex.submit(_cached_json, 'nbadepth:' + abbrev, ESPN_NBA_SITE_API + '/teams/' + abbrev.lower() + '/depthcharts')
+        roster_f = ex.submit(_cached_json, 'nbaroster:' + abbrev, ESPN_NBA_SITE_API + '/teams/' + abbrev.lower() + '/roster')
+        cur_f, prev_f = ex.submit(_nba_player_minutes, season), ex.submit(_nba_player_minutes, season - 1)
+        depth, roster = depth_f.result(), roster_f.result()
+        try:
+            cur, prev = cur_f.result(), prev_f.result()
+        except requests.RequestException:
+            cur, prev = {}, {}
+    team_id = (roster.get('team') or depth.get('team') or {}).get('id')
+    injuries = _nba_team_injuries(abbrev, team_id)
+    # The roster's own per-player injury entries are the more current source; they win on overlap.
+    names = {}
+    for p in roster.get('athletes') or []:
+        names[str(p['id'])] = p.get('displayName')
+        if p.get('injuries'):
+            latest = sorted(p['injuries'], key=lambda i: i.get('date') or '', reverse=True)[0]
+            injuries[str(p['id'])] = {'status': latest.get('status') or 'Injured',
+                                      'detail': (injuries.get(str(p['id'])) or {}).get('detail')}
+
+    def player(aid, name):
+        stats = cur.get(aid)
+        source = 'current'
+        if not stats or stats['gp'] < NBA_ROTATION_MIN_GP:
+            stats, source = prev.get(aid) or stats or {'gp': 0, 'mpg': 0, 'ppg': 0}, 'previous'
+        inj = injuries.get(aid)
+        return {
+            'id': aid, 'name': name, 'mpg': round(stats['mpg'], 1), 'gp': int(stats['gp']), 'ppg': round(stats['ppg'], 1),
+            'statSeason': source, 'injury': inj['status'] if inj else None, 'injuryDetail': inj['detail'] if inj else None,
+            'inactive': bool(inj) and inj['status'].lower() in NBA_INACTIVE_STATUSES,
+            'rotation': stats['gp'] >= NBA_ROTATION_MIN_GP and stats['mpg'] >= NBA_ROTATION_MPG,
+        }
+
+    # Starters: ESPN's first-listed player at each position -- except that ESPN moves an injured
+    # starter down the list while he's out. So if a player listed at that position is OUT and
+    # plays more minutes than ESPN's current first choice, he keeps the slot (struck through on
+    # the page) and the fill-in goes to the bench, instead of quietly becoming "the starter".
+    positions = ((depth.get('depthchart') or [{}])[0].get('positions') or {})
+    seen = {}
+    for pos in NBA_POSITIONS:
+        for a in (positions.get(pos) or {}).get('athletes') or []:
+            aid = str(a['id'])
+            seen.setdefault(aid, player(aid, a.get('displayName') or names.get(aid)))
+    for aid, name in names.items():  # anyone on the roster the depth chart left off
+        seen.setdefault(aid, player(aid, name))
+    starters, used = {}, set()
+    for pos in NBA_POSITIONS:
+        listed = [seen[str(a['id'])] for a in (positions.get(pos) or {}).get('athletes') or [] if str(a['id']) not in used]
+        if not listed:
+            continue
+        pick = listed[0]
+        hurt = [p for p in listed[1:] if p['inactive'] and p['mpg'] > pick['mpg']]
+        if hurt:
+            pick = max(hurt, key=lambda p: p['mpg'])
+        starters[pos] = pick
+        used.add(pick['id'])
+    bench = sorted((p for aid, p in seen.items() if aid not in used), key=lambda p: -p['mpg'])
+
+    out_rotation = [p for p in seen.values() if p['inactive'] and p['rotation']]
+    return {
+        'team': abbrev.upper(), 'season': season,
+        'starters': starters, 'bench': bench,
+        'missingRotationMinutes': round(sum(p['mpg'] for p in out_rotation), 1),
+        'missingRotationPlayers': [p['name'] for p in out_rotation],
+        'rotationRule': 'rotation = %d+ games and %d+ min/game (this season once a player has %d games, else last season)'
+                        % (NBA_ROTATION_MIN_GP, NBA_ROTATION_MPG, NBA_ROTATION_MIN_GP),
+    }
+
+
+@app.route('/api/nba/lineup/<abbrev>')
+def nba_lineup(abbrev):
+    try:
+        return jsonify(_compute_nba_lineup(abbrev))
+    except requests.RequestException as e:
+        return jsonify({'error': 'ESPN lineup request failed: ' + str(e)}), 502
 
 
 if __name__ == '__main__':
