@@ -173,6 +173,7 @@ async function fetchMatchup() {
 
     $('recordStatus').textContent = '';
     lineups = { A: null, B: null };
+    profiles = { A: null, B: null };
     ['A', 'B'].forEach(function (sd) { $('missingNote' + sd).textContent = 'Loading depth chart…'; });
     loadLineups(teamA, teamB); // separate from the stats so a slow depth chart never holds up the model
 
@@ -205,7 +206,40 @@ function blendNote(a, b) {
   return parts.length ? ' Point diff blends this season with last (' + parts.join(', ') + ' — fades as games are played).' : '';
 }
 
+/* ---------------------------- team profile (display only) ---------------------------- */
+// Shown for context, NOT fed to the model: they're the ingredients of point differential, so
+// adding them didn't improve held-out predictions (nba_signal_selection.py). r = each stat's
+// correlation with winning as a team-minus-opponent difference over 2021-22..2025-26; the
+// better side of each matchup is highlighted green.
+const PROFILE_STATS = [
+  { key: 'netRating', label: 'Net rating', d: 1, higherBetter: true, r: 0.341 },
+  { key: 'offRating', label: 'Off. rating', d: 1, higherBetter: true, r: 0.265 },
+  { key: 'defRating', label: 'Def. rating', d: 1, higherBetter: false, r: 0.268 },
+  { key: 'tsPct', label: 'True shooting %', d: 1, higherBetter: true, r: 0.219 },
+  { key: 'efgPct', label: 'eFG %', d: 1, higherBetter: true, r: 0.213 },
+  { key: 'tovPct', label: 'Turnover %', d: 1, higherBetter: false, r: 0.157 },
+  { key: 'threePct', label: '3P %', d: 1, higherBetter: true, r: 0.152 },
+  { key: 'pace', label: 'Pace', d: 1, higherBetter: null, r: 0.088 },
+  { key: 'orbPct', label: 'Off. rebound %', d: 1, higherBetter: true, r: 0.004 }
+];
+let profiles = { A: null, B: null };
+function renderProfiles() {
+  ['A', 'B'].forEach(function (side) {
+    const mine = profiles[side], theirs = profiles[side === 'A' ? 'B' : 'A'];
+    $('profileSeason' + side).textContent = mine ? '(' + (mine.season - 1) + '-' + String(mine.season).slice(2) + ', ' + mine.gamesPlayed + ' gms)' : '';
+    $('profile' + side).innerHTML = !mine ? '<div class="fetch-status">Fetch to load.</div>' : PROFILE_STATS.map(function (st) {
+      const v = mine[st.key], o = theirs ? theirs[st.key] : null;
+      const better = st.higherBetter !== null && v != null && o != null && v !== o && ((v > o) === st.higherBetter);
+      return '<div class="profile-item" title="Correlation with winning (vs. opponent): ' + st.r.toFixed(3) + '"><span>' + st.label +
+        '<span class="pr">r ' + st.r.toFixed(2) + '</span></span><span class="pv' + (better ? ' better' : '') + '">' +
+        (v == null ? '—' : (st.key === 'netRating' && v > 0 ? '+' : '') + v.toFixed(st.d)) + '</span></div>';
+    }).join('');
+  });
+}
+
 function applyTeamSummaryToInputs(side, s) {
+  profiles[side] = s ? s.advanced : null;
+  renderProfiles();
   if (!s) return;
   $('pointDiff' + side).value = fmtNum(s.pointDiffPerGame, 2);
   const c = s.current, p = s.previous;
@@ -394,6 +428,10 @@ function recalc() {
     lastCalc[key + 'A'] = val(key + 'A');
     lastCalc[key + 'B'] = val(key + 'B');
   });
+  PROFILE_STATS.forEach(function (st) {
+    lastCalc[st.key + 'A'] = profiles.A ? profiles.A[st.key] : null;
+    lastCalc[st.key + 'B'] = profiles.B ? profiles.B[st.key] : null;
+  });
 }
 
 /* ---------------------------- Trade log ---------------------------- */
@@ -536,21 +574,39 @@ function setTradeResult(id, result) {
   saveLog(entries); renderLog();
 }
 function deleteTrade(id) { saveLog(loadLog().filter(function (x) { return x.id !== id; })); renderLog(); }
-function tradePL(entry) {
+function tradePLBeforeFee(entry) {
   if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
   if (entry.result === 'loss') return -entry.stakeDollars;
   if (entry.result === 'push') return 0;
   return null;
 }
+// Kalshi's trading fee, charged when the order fills (win or lose, so it applies to every logged
+// trade -- including ones logged before this was added): 0.07 x contracts x price x (1 - price),
+// rounded UP to the next cent. Max ~1.75c per contract at 50c. Some Kalshi markets use a different
+// rate -- an entry can carry its own `fee` to override this.
+const KALSHI_FEE_RATE = 0.07;
+function kalshiFee(entry) {
+  if (entry.fee !== undefined && entry.fee !== null && !isNaN(entry.fee)) return entry.fee;
+  if (!entry.price || entry.price <= 0 || entry.price >= 1 || !entry.stakeDollars) return 0;
+  const contracts = entry.stakeDollars / entry.price;
+  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 100 - 1e-9) / 100;
+}
+function tradePL(entry) {
+  const pl = tradePLBeforeFee(entry);
+  return pl === null ? null : pl - kalshiFee(entry);
+}
+
 function renderLog() {
   const entries = loadLog();
   const tbody = $('logTbody');
   tbody.innerHTML = '';
-  let totalPL = 0, settled = 0, wins = 0;
+  let totalPL = 0, settled = 0, wins = 0, totalFees = 0;
   entries.slice().reverse().forEach(function (e) {
     const pl = tradePL(e);
-    const toWin = e.stakeDollars * (1 - e.price) / e.price;
-    if (pl !== null) { settled++; if (pl > 0) wins++; totalPL += pl; }
+    const fee = kalshiFee(e);
+    totalFees += fee;
+    const toWin = e.stakeDollars * (1 - e.price) / e.price - fee; // net of the Kalshi fee
+    if (pl !== null) { settled++; if (e.result === 'win' || (e.result === 'cashout' && pl > 0)) wins++; totalPL += pl; }
     const isSpread = e.betType === 'spread';
     const modelCell = isSpread ? '—' : fmtNum(e.model * 100, 1) + '%';
     const edgeCell = isSpread
@@ -571,7 +627,7 @@ function renderLog() {
     tr.children[8].appendChild(select);
     const plTd = tr.children[9];
     if (pl !== null) {
-      plTd.textContent = pl === 0 ? '$0.00 (push)' : (pl > 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+      plTd.textContent = e.result === 'push' ? '-$' + Math.abs(pl).toFixed(2) + ' (push — fee only)' : (pl > 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
       plTd.className = pl > 0 ? 'pos-val' : (pl < 0 ? 'neg-val' : '');
     } else plTd.textContent = '—';
     const delBtn = document.createElement('button');
@@ -586,7 +642,7 @@ function renderLog() {
     const winRate = settled > 0 ? (wins / settled * 100).toFixed(0) + '%' : '—';
     summary.innerHTML = entries.length + ' logged &middot; ' + settled + ' settled &middot; win rate ' + winRate +
       ' &middot; total P/L <span class="' + (totalPL >= 0 ? 'pos-val' : 'neg-val') + '">' +
-      (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> &middot; stored locally in this browser only';
+      (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> (after $' + totalFees.toFixed(2) + ' in Kalshi fees) &middot; stored locally in this browser only';
   }
 }
 
@@ -595,7 +651,9 @@ const MATCHUP_DATA_KEY = 'kalshiNbaMatchupData';
 const STAT_LABELS = { PointDiff: 'Point differential /gm', MissingMin: 'Missing rotation minutes' };
 const TRACKED_STATS = STAT_KEYS.map(function (k) {
   return { key: lowerFirst(k), label: STAT_LABELS[k], higherBetter: k !== 'MissingMin' };
-}).concat([{ key: 'model', label: 'Model probability', higherBetter: true }, { key: 'market', label: 'Market probability', higherBetter: true }]);
+}).concat(PROFILE_STATS.filter(function (st) { return st.higherBetter !== null; }).map(function (st) {
+  return { key: st.key, label: st.label + ' (not in model)', higherBetter: st.higherBetter };
+})).concat([{ key: 'model', label: 'Model probability', higherBetter: true }, { key: 'market', label: 'Market probability', higherBetter: true }]);
 
 function loadMatchupData() { try { return JSON.parse(localStorage.getItem(MATCHUP_DATA_KEY)) || []; } catch (e) { return []; } }
 function saveMatchupData(entries) { localStorage.setItem(MATCHUP_DATA_KEY, JSON.stringify(entries)); }
@@ -617,6 +675,7 @@ function recordMatchup() {
     const key = lowerFirst(k);
     entry[key + 'A'] = lastCalc[key + 'A']; entry[key + 'B'] = lastCalc[key + 'B'];
   });
+  PROFILE_STATS.forEach(function (st) { entry[st.key + 'A'] = lastCalc[st.key + 'A']; entry[st.key + 'B'] = lastCalc[st.key + 'B']; });
   entries.push(entry);
   saveMatchupData(entries);
   renderMatchupData();
@@ -778,6 +837,7 @@ $('teamAName').addEventListener('blur', function () { resolveAndBadge('A'); });
 $('teamBName').addEventListener('blur', function () { resolveAndBadge('B'); });
 $('gameDate').value = localIsoDate(new Date());
 getNbaTeams().catch(function () {});
+renderProfiles();
 resolveAndBadge('A'); resolveAndBadge('B');
 recalc();
 renderLog();

@@ -185,6 +185,11 @@
   .depth-player.clickable { cursor: pointer; }
   .depth-player.clickable:hover { text-decoration: underline; }
   .depth-player.inactive.clickable:hover { text-decoration: line-through underline; }
+  .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 14px; font-size: 12.5px; }
+  .profile-item { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--rule); color: var(--ink-muted); }
+  .profile-item .pv { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .profile-item .pv.better { color: var(--pos); }
+  .profile-item .pr { color: var(--ink-faint); font-size: 10.5px; margin-left: 4px; font-weight: 400; }
   .inj-adj { font-size: 11px; color: var(--neutral); font-variant-numeric: tabular-nums; }
   .injury-tag.dtd { background: rgba(201, 162, 75, 0.15); color: var(--neutral); }
 
@@ -289,6 +294,8 @@
       <div class="field"><label for="missingMinA">Missing rotation minutes tonight <span class="stat-contrib" id="contribMissingMinA"></span></label><input type="number" id="missingMinA" step="0.1" value="0"></div>
       <div class="fetch-status" id="missingNoteA" style="margin:-4px 0 10px;"></div>
       <div class="field"><label>Record <span class="inj-adj" id="recordA"></span></label></div>
+      <div class="adv-sub" style="margin:14px 0 6px;">Team profile &mdash; not in the model <span id="profileSeasonA"></span></div>
+      <div class="profile-grid" id="profileA"></div>
       <div class="field"><label>Home court <span class="stat-contrib" id="contribHomeA"></span></label></div>
     </div>
     <div class="card team-b">
@@ -297,6 +304,8 @@
       <div class="field"><label for="missingMinB">Missing rotation minutes tonight <span class="stat-contrib" id="contribMissingMinB"></span></label><input type="number" id="missingMinB" step="0.1" value="0"></div>
       <div class="fetch-status" id="missingNoteB" style="margin:-4px 0 10px;"></div>
       <div class="field"><label>Record <span class="inj-adj" id="recordB"></span></label></div>
+      <div class="adv-sub" style="margin:14px 0 6px;">Team profile &mdash; not in the model <span id="profileSeasonB"></span></div>
+      <div class="profile-grid" id="profileB"></div>
       <div class="field"><label>Home court <span class="stat-contrib" id="contribHomeB"></span></label></div>
     </div>
   </div>
@@ -428,7 +437,7 @@
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
     <div class="log-scroll" style="margin-top:12px;">
       <table class="log-table">
-        <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge / Line</th><th>Stake</th><th>To Win</th><th>Result</th><th>P/L</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge / Line</th><th>Stake</th><th>To Win (after fee)</th><th>Result</th><th>P/L</th><th></th></tr></thead>
         <tbody id="logTbody"></tbody>
       </table>
     </div>

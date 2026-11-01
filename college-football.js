@@ -489,20 +489,38 @@ function setTradeResult(id, result) {
   saveLog(entries); renderLog();
 }
 function deleteTrade(id) { saveLog(loadLog().filter(function (x) { return x.id !== id; })); renderLog(); }
-function tradePL(entry) {
+function tradePLBeforeFee(entry) {
   if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
   if (entry.result === 'loss') return -entry.stakeDollars;
   return null;
 }
+// Kalshi's trading fee, charged when the order fills (win or lose, so it applies to every logged
+// trade -- including ones logged before this was added): 0.07 x contracts x price x (1 - price),
+// rounded UP to the next cent. Max ~1.75c per contract at 50c. Some Kalshi markets use a different
+// rate -- an entry can carry its own `fee` to override this.
+const KALSHI_FEE_RATE = 0.07;
+function kalshiFee(entry) {
+  if (entry.fee !== undefined && entry.fee !== null && !isNaN(entry.fee)) return entry.fee;
+  if (!entry.price || entry.price <= 0 || entry.price >= 1 || !entry.stakeDollars) return 0;
+  const contracts = entry.stakeDollars / entry.price;
+  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 100 - 1e-9) / 100;
+}
+function tradePL(entry) {
+  const pl = tradePLBeforeFee(entry);
+  return pl === null ? null : pl - kalshiFee(entry);
+}
+
 function renderLog() {
   const entries = loadLog();
   const tbody = $('logTbody');
   tbody.innerHTML = '';
-  let totalPL = 0, settled = 0, wins = 0;
+  let totalPL = 0, settled = 0, wins = 0, totalFees = 0;
   entries.slice().reverse().forEach(function (e) {
     const pl = tradePL(e);
-    const toWin = e.stakeDollars * (1 - e.price) / e.price;
-    if (pl !== null) { settled++; if (pl > 0) wins++; totalPL += pl; }
+    const fee = kalshiFee(e);
+    totalFees += fee;
+    const toWin = e.stakeDollars * (1 - e.price) / e.price - fee; // net of the Kalshi fee
+    if (pl !== null) { settled++; if (e.result === 'win' || (e.result === 'cashout' && pl > 0)) wins++; totalPL += pl; }
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + e.date + '</td><td>' + e.matchup + '</td><td>' + e.side + '</td>' +
@@ -531,7 +549,7 @@ function renderLog() {
     const winRate = settled > 0 ? (wins / settled * 100).toFixed(0) + '%' : '—';
     summary.innerHTML = entries.length + ' logged &middot; ' + settled + ' settled &middot; win rate ' + winRate +
       ' &middot; total P/L <span class="' + (totalPL >= 0 ? 'pos-val' : 'neg-val') + '">' +
-      (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> &middot; stored locally in this browser only';
+      (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> (after $' + totalFees.toFixed(2) + ' in Kalshi fees) &middot; stored locally in this browser only';
   }
 }
 

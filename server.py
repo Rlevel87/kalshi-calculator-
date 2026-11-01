@@ -865,7 +865,7 @@ def _nba_team_results(abbrev, season):
     data = _cached_json('nbasched:%s:%s' % (abbrev, season), ESPN_NBA_SITE_API + '/teams/' + abbrev.lower() + '/schedule',
                         {'season': season, 'seasontype': 2})
     team_id = str((data.get('team') or {}).get('id'))
-    gp = wins = margin = 0
+    gp = wins = margin = pts_against = 0
     for e in data.get('events') or []:
         comp = (e.get('competitions') or [{}])[0]
         if not ((comp.get('status') or {}).get('type') or {}).get('completed'):
@@ -878,7 +878,34 @@ def _nba_team_results(abbrev, season):
         gp += 1
         wins += 1 if me.get('winner') else 0
         margin += score(me) - score(them)
-    return {'gamesPlayed': gp, 'wins': wins, 'pointDiffPerGame': margin / gp if gp else None}
+        pts_against += score(them)
+    return {'gamesPlayed': gp, 'wins': wins, 'pointDiffPerGame': margin / gp if gp else None,
+            'pointsAllowed': pts_against, 'teamId': team_id}
+
+
+ESPN_NBA_CORE_API = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba'
+
+
+def _nba_advanced(team_id, season, points_allowed):
+    """Display-only efficiency stats from ESPN's season team stats (not model inputs -- they're
+    the ingredients of point differential, so adding them didn't help predictions). Defensive
+    rating uses the team's own possessions for its opponents' too; teams' possession counts in
+    a game are nearly identical."""
+    data = _cached_json('nbaadv:%s:%s' % (team_id, season),
+                        ESPN_NBA_CORE_API + '/seasons/%s/types/2/teams/%s/statistics' % (season, team_id))
+    st = {x['name']: x.get('value') for c in (data.get('splits') or {}).get('categories') or [] for x in c.get('stats') or []}
+    gp, poss = st.get('gamesPlayed') or 0, st.get('estimatedPossessions') or 0
+    if not gp or not poss:
+        return None
+    ortg = 100 * (st.get('points') or 0) / poss
+    drtg = 100 * points_allowed / poss if points_allowed else None
+    return {
+        'season': season, 'gamesPlayed': int(gp),
+        'offRating': ortg, 'defRating': drtg, 'netRating': (ortg - drtg) if drtg is not None else None,
+        'efgPct': st.get('effectiveFGPct'), 'tsPct': st.get('trueShootingPct'), 'threePct': st.get('threePointFieldGoalPct'),
+        'tovPct': 100 * (st.get('totalTurnovers') or 0) / poss, 'orbPct': st.get('offReboundRate'),
+        'pace': st.get('avgEstimatedPossessions'),
+    }
 
 
 @app.route('/api/nba/team-summary/<abbrev>')
@@ -901,9 +928,15 @@ def nba_team_summary(abbrev):
         pdiff, prior_weight = prev['pointDiffPerGame'], 1
     else:
         return jsonify({'error': 'No games found for ' + abbrev}), 404
+    # Display stats: this season once it has games, else last season.
+    adv_src, adv_season = (cur, season) if gp else (prev, season - 1)
+    try:
+        advanced = _nba_advanced(adv_src['teamId'], adv_season, adv_src['pointsAllowed'])
+    except (requests.RequestException, ValueError):
+        advanced = None
     return jsonify({
         'team': abbrev.upper(), 'season': season, 'pointDiffPerGame': pdiff, 'priorSeasonWeight': prior_weight,
-        'current': cur, 'previous': prev,
+        'current': cur, 'previous': prev, 'advanced': advanced,
     })
 
 
