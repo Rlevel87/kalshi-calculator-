@@ -820,7 +820,7 @@
           <button type="button" class="btn btn-sm" onclick="bumpBankroll(100)">+ $100</button>
         </div>
       </div>
-      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
+      <div class="field"><label for="edgeThreshold">Min. edge after fee to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
     </div>
   </details>
 
@@ -863,7 +863,7 @@
       <div class="metric">
         <div class="m-label">Edge (best side)</div>
         <div class="m-val" id="edgeVal">&mdash;</div>
-        <div class="m-sub">model &minus; market, percentage points</div>
+        <div class="m-sub">model &minus; (price + Kalshi fee), percentage points</div>
       </div>
       <div class="metric">
         <div class="m-label">EV per contract (fee incl.)</div>
@@ -890,10 +890,13 @@
       <button type="button" class="btn" onclick="exportLog()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
+      <button type="button" class="btn" onclick="document.getElementById('importKalshiFile').click()" title="Kalshi → Account → download realized P&amp;L (unzip it first). Uses Kalshi's actual fills and fees.">Import Kalshi P&amp;L .csv</button>
+      <input type="file" id="importKalshiFile" accept=".csv,text/csv" class="hidden" onchange="importKalshiPnlCsv(event, ['KXMLBGAME'])">
     </div>
     <div class="fetch-status" style="margin-bottom:10px;">Set the Result manually, or click "Fetch results for pending trades" to pull final scores from MLB automatically.</div>
     <div class="fetch-status" id="fetchTradeResultsStatus" style="margin-bottom:10px;"></div>
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
+    <div id="logPriceSummary"></div>
     <div class="log-scroll" style="margin-top:12px; max-height:398px;">
       <table class="log-table">
         <thead>
@@ -941,6 +944,8 @@
         <div class="m-val" id="avgEdgeLossVal">&mdash;</div>
         <div class="m-sub" id="avgEdgeLossSub">&mdash;</div>
       </div>
+      <div class="metric"><div class="m-label">Model pick win rate</div><div class="m-val" id="pickWinRateVal">&mdash;</div><div class="m-sub" id="pickWinRateSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Win rate needed &mdash; every pick</div><div class="m-val" id="neededWinRateVal">&mdash;</div><div class="m-sub" id="neededWinRateSub">&mdash;</div></div>
     </div>
     <div class="sample-note">"Recommendation" = whichever side had the better edge (model &minus; market) when you recorded the matchup. Win rate is how often that side actually won. "Avg edge" splits the edge size itself (in points, at record time) by outcome &mdash; if winning recommendations show a noticeably bigger average edge than losing ones, that's a sign the edge size itself is meaningful, not just noise.</div>
 
@@ -992,6 +997,7 @@
 
 </div>
 
+<script src="kalshi-import.js"></script>
 <script>
 let mlbTeams = null; // cached MLB team list
 let lastCalc = null; // latest recalc() output, read by "Log this trade"
@@ -1016,9 +1022,11 @@ function log5(pA, pB) {
 // doesn't change the $1 payout on a win -- economically that's identical to the price itself
 // just being higher, so "price + fee" is used everywhere "price" alone was used before, both
 // for Kelly sizing and for EV.
+// Per contract. Kalshi's realized P&L export shows fees are NOT rounded up to a whole cent per
+// contract (they're rounded per order to a hundredth of a cent), so this is the exact rate.
 function kalshiFee(price) {
   if (price <= 0 || price >= 1) return 0;
-  return Math.ceil(0.07 * price * (1 - price) * 100) / 100;
+  return 0.07 * price * (1 - price);
 }
 function effectivePrice(price) { return price + kalshiFee(price); }
 
@@ -1276,8 +1284,10 @@ function recalc() {
   document.getElementById('marketABar').style.width = (marketA * 100) + '%';
   document.getElementById('marketBBar').style.width = (marketB * 100) + '%';
 
-  const edgeA = modelA - marketA;
-  const edgeB = modelB - marketB;
+  // Edge is net of Kalshi's fee: the model vs. what one contract actually costs (price + fee), so
+  // the banner only recommends a bet that's still +EV after paying to make it.
+  const edgeA = modelA - effectivePrice(rawA);
+  const edgeB = modelB - effectivePrice(rawB);
 
   const threshold = val('edgeThreshold') / 100;
   const kellyFrac = val('kellyFrac');
@@ -1299,11 +1309,9 @@ function recalc() {
   if (edgeA >= edgeB) { side = 'A'; edge = edgeA; price = rawA; model = modelA; name = nameA; }
   else { side = 'B'; edge = edgeB; price = rawB; model = modelB; name = nameB; }
 
-  // All actual money math (EV, Kelly sizing, contract cost) uses price + Kalshi's real trading
-  // fee -- the fee is paid at entry regardless of outcome and doesn't change the $1 payout on a
-  // win, so it's economically identical to the price itself being higher. The edge/recommendation
-  // decision above still compares model vs. the de-vigged MARKET price (fees aren't part of
-  // whether there's a mispricing -- they're part of what it costs you to act on one).
+  // All money math (edge, EV, Kelly sizing, contract cost) uses price + Kalshi's trading fee -- the
+  // fee is paid at entry regardless of outcome and doesn't change the $1 payout on a win, so it's
+  // economically identical to the price itself being higher.
   const feePrice = effectivePrice(price);
 
   edgeVal.textContent = fmtPts(edge);
@@ -2060,18 +2068,18 @@ function tradePLBeforeFee(entry) {
 
 // Kalshi's trading fee, charged when the order fills (win or lose, so it applies to every logged
 // trade -- including ones logged before this was added): 0.07 x contracts x price x (1 - price),
-// rounded UP to the next cent. Max ~1.75c per contract at 50c. Some Kalshi markets use a different
+// rounded UP to the next hundredth of a cent (matches the fees on Kalshi's realized P&L export). Max ~1.75c per contract at 50c. Some Kalshi markets use a different
 // rate -- an entry can carry its own `fee` to override this.
 const KALSHI_FEE_RATE = 0.07;
-function kalshiFee(entry) {
+function kalshiTradeFee(entry) {
   if (entry.fee !== undefined && entry.fee !== null && !isNaN(entry.fee)) return entry.fee;
   if (!entry.price || entry.price <= 0 || entry.price >= 1 || !entry.stakeDollars) return 0;
   const contracts = entry.stakeDollars / entry.price;
-  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 100 - 1e-9) / 100;
+  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 10000 - 1e-6) / 10000;
 }
 function tradePL(entry) {
   const pl = tradePLBeforeFee(entry);
-  return pl === null ? null : pl - kalshiFee(entry);
+  return pl === null ? null : pl - kalshiTradeFee(entry);
 }
 
 function renderLog() {
@@ -2082,7 +2090,7 @@ function renderLog() {
 
   entries.slice().reverse().forEach(function (e) {
     const pl = tradePL(e);
-    const fee = kalshiFee(e);
+    const fee = kalshiTradeFee(e);
     totalFees += fee;
     const toWin = e.stakeDollars * (1 - e.price) / e.price - fee; // net of the Kalshi fee
     // A "cashed out" trade isn't resolved until an amount is entered, so pl stays null until then.
@@ -2094,8 +2102,8 @@ function renderLog() {
       '<td>' + e.matchup + '</td>' +
       '<td>' + e.side + '</td>' +
       '<td>' + Math.round(e.price * 100) + '¢</td>' +
-      '<td>' + (e.model * 100).toFixed(1) + '%</td>' +
-      '<td>' + (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts</td>' +
+      '<td>' + (e.model == null ? '—' : (e.model * 100).toFixed(1) + '%') + '</td>' +
+      '<td>' + (e.edge == null ? '—' : (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts') + '</td>' +
       '<td>$' + e.stakeDollars.toFixed(2) + '</td>' +
       '<td>+$' + toWin.toFixed(2) + '</td>' +
       '<td></td><td></td><td></td>';
@@ -2147,6 +2155,7 @@ function renderLog() {
       ' &middot; total P/L <span class="' + (totalPL >= 0 ? 'pl-pos' : 'pl-neg') + '">' +
       (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> (after $' + totalFees.toFixed(2) + ' in Kalshi fees) &middot; stored locally in this browser only';
   }
+  renderAveragePricePanel(entries);
 }
 
 renderLog();
@@ -2389,6 +2398,7 @@ function renderRecommendationPerf() {
   document.getElementById('avgEdgeWinSub').textContent = perf.winCount + ' win' + (perf.winCount === 1 ? '' : 's');
   document.getElementById('avgEdgeLossVal').textContent = perf.avgEdgeLoss !== null ? fmtEdgePts(perf.avgEdgeLoss) : '—';
   document.getElementById('avgEdgeLossSub').textContent = perf.lossCount + ' loss' + (perf.lossCount === 1 ? '' : 'es');
+  renderNeededWinRates(loadMatchupData());
 }
 
 // For each tracked stat, walks settled matchups oldest-to-newest and checks whether the team

@@ -43,6 +43,11 @@ function fmtPts(x) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + ' pts';
 function z(value, mean, sd) { return sd ? (value - mean) / sd : 0; }
 function logistic(x, scale) { return 1 / (1 + Math.pow(10, -x / scale)); }
 function log5(pA, pB) { const den = pA + pB - 2 * pA * pB; return den <= 0 ? 0.5 : (pA - pA * pB) / den; }
+// Kalshi's fee per contract at a given price (0.07 x price x (1 - price), ~1.75c max at 50c), and the
+// all-in cost of one contract. Edge, EV and Kelly all use the all-in cost, so the recommendation only
+// fires when the model beats what you'd actually pay.
+function feePerContract(price) { return (price <= 0 || price >= 1) ? 0 : 0.07 * price * (1 - price); }
+function effectivePrice(price) { return price + feePerContract(price); }
 function kellyFraction(p, price) {
   if (price <= 0 || price >= 1) return 0;
   const b = (1 - price) / price, q = 1 - p;
@@ -387,7 +392,9 @@ function recalc() {
   $('modelABar').style.width = (modelA * 100) + '%'; $('modelBBar').style.width = (modelB * 100) + '%';
   $('marketABar').style.width = (marketA * 100) + '%'; $('marketBBar').style.width = (marketB * 100) + '%';
 
-  const edgeA = modelA - marketA, edgeB = modelB - marketB;
+  // Net of Kalshi's fee: model vs. what a contract actually costs, so the banner only fires on bets
+  // that are still +EV after paying the fee.
+  const edgeA = modelA - effectivePrice(rawA), edgeB = modelB - effectivePrice(rawB);
   const threshold = val('edgeThreshold') / 100;
   const kellyFrac = val('kellyFrac'), bankroll = val('bankroll');
 
@@ -399,16 +406,16 @@ function recalc() {
   else { side = 'B'; edge = edgeB; price = rawB; model = modelB; name = nameB; }
 
   edgeVal.textContent = fmtPts(edge);
-  const ev = model - price;
+  const ev = model - effectivePrice(price);
   evVal.textContent = (ev >= 0 ? '+$' : '-$') + Math.abs(ev).toFixed(3);
-  evSub.textContent = 'per $1 staked on ' + name;
+  evSub.textContent = 'per contract on ' + name + ' (after ' + (feePerContract(price) * 100).toFixed(1) + '¢ fee)';
 
   let stakeFrac = 0;
   if (edge >= threshold) {
     banner.className = 'rec-banner pos';
     recMain.textContent = 'Buy ' + name + ' Yes';
     recEdgeVal.textContent = fmtPts(edge);
-    stakeFrac = kellyFraction(model, price) * kellyFrac;
+    stakeFrac = kellyFraction(model, effectivePrice(price)) * kellyFrac;
     kellyVal.textContent = (stakeFrac * 100).toFixed(1) + '%';
     kellySub.textContent = '≈ $' + (stakeFrac * bankroll).toFixed(2) + ' of bankroll (fractional Kelly)';
   } else if (edge <= -threshold) {
@@ -492,22 +499,23 @@ function deleteTrade(id) { saveLog(loadLog().filter(function (x) { return x.id !
 function tradePLBeforeFee(entry) {
   if (entry.result === 'win') return entry.stakeDollars * (1 - entry.price) / entry.price;
   if (entry.result === 'loss') return -entry.stakeDollars;
+  if (entry.result === 'cashout') return (entry.cashOutAmount === undefined || entry.cashOutAmount === null || isNaN(entry.cashOutAmount)) ? null : entry.cashOutAmount - entry.stakeDollars; // sold before settlement
   return null;
 }
 // Kalshi's trading fee, charged when the order fills (win or lose, so it applies to every logged
 // trade -- including ones logged before this was added): 0.07 x contracts x price x (1 - price),
-// rounded UP to the next cent. Max ~1.75c per contract at 50c. Some Kalshi markets use a different
+// rounded UP to the next hundredth of a cent (matches the fees on Kalshi's realized P&L export). Max ~1.75c per contract at 50c. Some Kalshi markets use a different
 // rate -- an entry can carry its own `fee` to override this.
 const KALSHI_FEE_RATE = 0.07;
-function kalshiFee(entry) {
+function kalshiTradeFee(entry) {
   if (entry.fee !== undefined && entry.fee !== null && !isNaN(entry.fee)) return entry.fee;
   if (!entry.price || entry.price <= 0 || entry.price >= 1 || !entry.stakeDollars) return 0;
   const contracts = entry.stakeDollars / entry.price;
-  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 100 - 1e-9) / 100;
+  return Math.ceil(KALSHI_FEE_RATE * contracts * entry.price * (1 - entry.price) * 10000 - 1e-6) / 10000;
 }
 function tradePL(entry) {
   const pl = tradePLBeforeFee(entry);
-  return pl === null ? null : pl - kalshiFee(entry);
+  return pl === null ? null : pl - kalshiTradeFee(entry);
 }
 
 function renderLog() {
@@ -517,21 +525,23 @@ function renderLog() {
   let totalPL = 0, settled = 0, wins = 0, totalFees = 0;
   entries.slice().reverse().forEach(function (e) {
     const pl = tradePL(e);
-    const fee = kalshiFee(e);
+    const fee = kalshiTradeFee(e);
     totalFees += fee;
     const toWin = e.stakeDollars * (1 - e.price) / e.price - fee; // net of the Kalshi fee
     if (pl !== null) { settled++; if (e.result === 'win' || (e.result === 'cashout' && pl > 0)) wins++; totalPL += pl; }
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + e.date + '</td><td>' + e.matchup + '</td><td>' + e.side + '</td>' +
-      '<td>' + Math.round(e.price * 100) + '¢</td><td>' + (e.model * 100).toFixed(1) + '%</td>' +
-      '<td>' + (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts</td>' +
+      '<td>' + Math.round(e.price * 100) + '¢</td><td>' + (e.model == null ? '—' : (e.model * 100).toFixed(1) + '%') + '</td>' +
+      '<td>' + (e.edge == null ? '—' : (e.edge >= 0 ? '+' : '') + (e.edge * 100).toFixed(1) + ' pts') + '</td>' +
       '<td>$' + e.stakeDollars.toFixed(2) + '</td><td>+$' + toWin.toFixed(2) + '</td><td></td><td></td><td></td>';
     const select = document.createElement('select');
     [['pending', 'pending'], ['win', 'win'], ['loss', 'loss']].forEach(function (opt) {
       const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
       if (opt[0] === e.result) o.selected = true; select.appendChild(o);
     });
+    // Imported Kalshi fills can be positions sold before the game ended.
+    if (e.result === 'cashout') { const o = document.createElement('option'); o.value = 'cashout'; o.textContent = 'sold early $' + (e.cashOutAmount || 0).toFixed(2); o.selected = true; select.appendChild(o); }
     select.addEventListener('change', function () { setTradeResult(e.id, select.value); });
     tr.children[8].appendChild(select);
     const plTd = tr.children[9];
@@ -551,6 +561,7 @@ function renderLog() {
       ' &middot; total P/L <span class="' + (totalPL >= 0 ? 'pos-val' : 'neg-val') + '">' +
       (totalPL >= 0 ? '+$' : '-$') + Math.abs(totalPL).toFixed(2) + '</span> (after $' + totalFees.toFixed(2) + ' in Kalshi fees) &middot; stored locally in this browser only';
   }
+  renderAveragePricePanel(entries);
 }
 
 /* ---------------------------- Matchup data & analysis (identical pattern to the other models) ---------------------------- */
@@ -675,6 +686,7 @@ function renderRecommendationPerf() {
   $('avgEdgeWinSub').textContent = perf.winCount + ' win' + (perf.winCount === 1 ? '' : 's');
   $('avgEdgeLossVal').textContent = perf.avgEdgeLoss !== null ? fmtEdgePts(perf.avgEdgeLoss) : '—';
   $('avgEdgeLossSub').textContent = perf.lossCount + ' loss' + (perf.lossCount === 1 ? '' : 'es');
+  renderNeededWinRates(loadMatchupData());
 }
 function computeStatAccuracy(entries) {
   const settled = entries.filter(function (e) { return e.result === 'A' || e.result === 'B'; }).slice().sort(function (a, b) { return a.id - b.id; });

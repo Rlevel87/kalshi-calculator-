@@ -361,7 +361,7 @@
     <div class="adv-grid">
       <div class="field"><label for="kellyFrac">Kelly fraction</label><input type="number" id="kellyFrac" step="0.05" value="0.15"></div>
       <div class="field"><label for="bankroll">Bankroll ($)</label><input type="number" id="bankroll" step="10" value="100"></div>
-      <div class="field"><label for="edgeThreshold">Min. edge to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
+      <div class="field"><label for="edgeThreshold">Min. edge after fee to flag (pts)</label><input type="number" id="edgeThreshold" step="0.5" value="8"></div>
     </div>
   </details>
 
@@ -401,7 +401,7 @@
     </div>
 
     <div class="metrics">
-      <div class="metric"><div class="m-label">Edge (best side)</div><div class="m-val" id="edgeVal">&mdash;</div><div class="m-sub">model &minus; market, percentage points</div></div>
+      <div class="metric"><div class="m-label">Edge (best side)</div><div class="m-val" id="edgeVal">&mdash;</div><div class="m-sub">model &minus; (price + Kalshi fee), percentage points</div></div>
       <div class="metric"><div class="m-label">EV per $1 contract</div><div class="m-val" id="evVal">&mdash;</div><div class="m-sub" id="evSub">&mdash;</div></div>
       <div class="metric"><div class="m-label">Suggested stake</div><div class="m-val" id="kellyVal">&mdash;</div><div class="m-sub" id="kellySub">&mdash;</div></div>
     </div>
@@ -419,8 +419,11 @@
       <button type="button" class="btn" onclick="exportLog()">Export .json</button>
       <button type="button" class="btn" onclick="document.getElementById('importFile').click()">Import .json</button>
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importLog(event)">
+      <button type="button" class="btn" onclick="document.getElementById('importKalshiFile').click()" title="Kalshi → Account → download realized P&amp;L (unzip it first). Uses Kalshi's actual fills and fees.">Import Kalshi P&amp;L .csv</button>
+      <input type="file" id="importKalshiFile" accept=".csv,text/csv" class="hidden" onchange="importKalshiPnlCsv(event, ['KXNCAAFGAME', 'KXNCAAFSPREAD'])">
     </div>
     <div class="log-summary" id="logSummary">No trades logged yet.</div>
+    <div id="logPriceSummary"></div>
     <div class="log-scroll" style="margin-top:12px;">
       <table class="log-table">
         <thead><tr><th>Date</th><th>Matchup</th><th>Side</th><th>Price</th><th>Model %</th><th>Edge</th><th>Stake</th><th>To Win (after fee)</th><th>Result</th><th>P/L</th><th></th></tr></thead>
@@ -454,6 +457,8 @@
       <div class="metric"><div class="m-label">Recommendation win rate</div><div class="m-val" id="recWinRateVal">&mdash;</div><div class="m-sub" id="recWinRateSub">&mdash;</div></div>
       <div class="metric"><div class="m-label">Avg edge &mdash; wins</div><div class="m-val" id="avgEdgeWinVal">&mdash;</div><div class="m-sub" id="avgEdgeWinSub">&mdash;</div></div>
       <div class="metric"><div class="m-label">Avg edge &mdash; losses</div><div class="m-val" id="avgEdgeLossVal">&mdash;</div><div class="m-sub" id="avgEdgeLossSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Model pick win rate</div><div class="m-val" id="pickWinRateVal">&mdash;</div><div class="m-sub" id="pickWinRateSub">&mdash;</div></div>
+      <div class="metric"><div class="m-label">Win rate needed &mdash; every pick</div><div class="m-val" id="neededWinRateVal">&mdash;</div><div class="m-sub" id="neededWinRateSub">&mdash;</div></div>
     </div>
 
     <div class="adv-sub" style="margin-top:22px;">Stat accuracy (settled matchups only)</div>
@@ -500,6 +505,7 @@
 
 </div>
 
+<script src="kalshi-import.js"></script>
 <script src="college-football.js"></script>
 </body>
 </html>
